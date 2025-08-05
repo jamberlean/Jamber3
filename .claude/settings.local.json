@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm start)",
+      "Bash(npm run debug:*)",
+      "Bash(rm:*)",
+      "Bash(cat:*)",
+      "Bash(node:*)",
+      "Bash(cp:*)",
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(timeout 10s npm start)",
+      "Bash(timeout:*)",
+      "Bash(copy database.js database-broken2.js)",
+      "Bash(copy database-fixed.js database.js)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "Bash(del test-resource-finding.js)",
+      "Bash(ren:*)",
+      "Bash(mv:*)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(git config:*)",
+      "Bash(git config user.name \"Alan Belanger\")"
+    ],
+    "deny": []
+  }
+}

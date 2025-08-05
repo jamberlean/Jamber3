@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jamber3 - Automated Guitar Song Library</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Jamber3</h1>
+            <p>Your Automated Guitar Song Library</p>
+        </header>
+
+        <main>
+            <div class="app-toolbar">
+                <button id="scanBtn" class="primary-btn">Scan for Music</button>
+                <button id="addSongBtn" class="secondary-btn">Add Song Manually</button>
+                <div class="toolbar-right">
+                    <button id="settingsBtn" class="icon-btn" title="Settings">⚙️</button>
+                </div>
+            </div>
+
+            <div class="app-content">
+                <div class="left-pane">
+                    <div class="pane-header">
+                        <h3>Music Library</h3>
+                        <div class="library-search">
+                            <input type="text" id="librarySearchInput" placeholder="Search artist or title..." class="library-search-input">
+                        </div>
+                        <div class="view-controls">
+                            <button class="view-btn active" data-view="artist">Artists</button>
+                            <button class="view-btn" data-view="album">Albums</button>
+                            <button class="view-btn" data-view="folder">Folders</button>
+                            <button class="view-btn" data-view="all">All</button>
+                        </div>
+                        <div class="filter-controls">
+                            <label class="filter-checkbox">
+                                <input type="checkbox" id="resourceFilter">
+                                <span class="checkmark"></span>
+                                Show only songs with resources
+                            </label>
+                        </div>
+                    </div>
+                    <div class="song-explorer" id="songExplorer">
+                        <div class="empty-state">
+                            <div class="empty-icon">🎵</div>
+                            <h4>No Music Found</h4>
+                            <p>Click "Scan for Music" to discover songs on your computer</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="right-pane">
+                    <div class="pane-header">
+                        <h3>Song Details</h3>
+                    </div>
+                    <div class="song-details" id="songDetails">
+                        <div class="empty-state">
+                            <div class="empty-icon">📄</div>
+                            <h4>No Song Selected</h4>
+                            <p>Select a song from the library to view details</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="addSongModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 id="modalTitle">Add New Song</h2>
+                        <span class="close">&times;</span>
+                    </div>
+                    <form id="addSongForm">
+                        <div class="form-group">
+                            <label for="title">Song Title *</label>
+                            <input type="text" id="title" name="title" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="artist">Artist</label>
+                            <input type="text" id="artist" name="artist">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="lyrics">Lyrics</label>
+                            <div class="file-input-group">
+                                <input type="file" id="lyrics" name="lyrics" accept=".txt,.doc,.docx">
+                                <span class="file-name">No file selected</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="mp3">Local MP3</label>
+                            <div class="file-input-group">
+                                <input type="file" id="mp3" name="mp3" accept=".mp3,.wav,.m4a">
+                                <span class="file-name">No file selected</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="tablature">Tablature URL</label>
+                            <input type="url" id="tablature" name="tablature" placeholder="https://...">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="tablature-content">Tablature Content</label>
+                            <textarea id="tablature-content" name="tablature-content" rows="8" placeholder="Enter tablature notation here..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="lyrics-content">Lyrics Content</label>
+                            <textarea id="lyrics-content" name="lyrics-content" rows="8" placeholder="Enter song lyrics here..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="youtube">YouTube URL</label>
+                            <input type="url" id="youtube" name="youtube" placeholder="https://youtube.com/...">
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" id="cancelBtn" class="btn-secondary">Cancel</button>
+                            <button type="submit" id="submitBtn" class="btn-primary" disabled>Add Song</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+
+    <script src="node_modules/howler/dist/howler.min.js"></script>
+    <script src="progress-indicator.js"></script>
+    <script src="song-explorer.js"></script>
+    <script src="song-details.js"></script>
+    <script src="resource-review.js"></script>
+    <script src="audio-player.js"></script>
+    <script src="tablary-app.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

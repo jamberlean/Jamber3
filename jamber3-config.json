@@ -1,0 +1,84 @@
+{
+  "version": "1.0.0",
+  "locked": false,
+  "scan_directories": {
+    "enabled_paths": [
+      "C:\\Users\\abelanger\\Music",
+      "C:\\Users\\abelanger\\Downloads",
+      "C:\\Users\\Public\\Music",
+      "D:\\Music"
+    ],
+    "excluded_paths": [
+      "node_modules",
+      ".git",
+      ".vs",
+      ".vscode",
+      "Temp",
+      "tmp",
+      "$RECYCLE.BIN",
+      "System Volume Information",
+      "C:\\Windows",
+      "C:\\Program Files",
+      "C:\\Program Files (x86)",
+      "C:\\ProgramData",
+      "C:\\System32",
+      "F:\\Music",
+	  "D:\\Music\\Michael Hedges\\Hedges, Michael - LIVE 5-2005 Remastered By FiveElements",
+	  "D:\\Music\\_Children"
+    ],
+    "custom_paths": [],
+    "include_subdirectories": true,
+    "max_depth": 10,
+    "follow_symlinks": false
+  },
+  "file_filters": {
+    "supported_formats": [
+      ".mp3",
+      ".m4a",
+      ".wav",
+      ".flac",
+      ".ogg",
+      ".wma"
+    ],
+    "min_file_size": 1024,
+    "max_file_size": 1073741824,
+    "skip_hidden_files": true
+  },
+  "scanning": {
+    "auto_scan_on_startup": false,
+    "scan_interval_hours": 24,
+    "show_progress_for_operations_longer_than": 1000,
+    "batch_size": 100,
+    "pause_between_batches": 50
+  },
+  "ui_preferences": {
+    "theme": "light",
+    "default_view": "artist",
+    "sort_order": "title",
+    "sort_direction": "asc",
+    "show_file_paths": false,
+    "auto_play_preview": false
+  },
+  "resource_discovery": {
+    "enabled": true,
+    "auto_search_on_add": true,
+    "preferred_tab_sites": [
+      "ultimate-guitar",
+      "songsterr"
+    ],
+    "preferred_lyrics_sites": [
+      "genius",
+      "azlyrics"
+    ],
+    "search_timeout": 30000,
+    "rate_limit_delay": 2000
+  },
+  "advanced": {
+    "backup_database": true,
+    "backup_interval_days": 7,
+    "cleanup_missing_files": true,
+    "log_level": "info",
+    "cache_metadata": true,
+    "cache_duration_days": 30
+  }
+}

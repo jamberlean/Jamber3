@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#3498db" stroke="#2980b9" stroke-width="4"/>
+  
+  <!-- Guitar body -->
+  <ellipse cx="128" cy="140" rx="35" ry="50" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  
+  <!-- Guitar neck -->
+  <rect x="120" y="60" width="16" height="80" fill="#D2691E" stroke="#B8860B" stroke-width="1"/>
+  
+  <!-- Guitar strings -->
+  <line x1="124" y1="60" x2="124" y2="190" stroke="#C0C0C0" stroke-width="1"/>
+  <line x1="127" y1="60" x2="127" y2="190" stroke="#C0C0C0" stroke-width="1"/>
+  <line x1="129" y1="60" x2="129" y2="190" stroke="#C0C0C0" stroke-width="1"/>
+  <line x1="132" y1="60" x2="132" y2="190" stroke="#C0C0C0" stroke-width="1"/>
+  
+  <!-- Sound hole -->
+  <circle cx="128" cy="140" r="12" fill="#2C3E50"/>
+  
+  <!-- Music notes -->
+  <circle cx="80" cy="80" r="8" fill="#F1C40F"/>
+  <rect x="88" y="72" width="2" height="20" fill="#F1C40F"/>
+  
+  <circle cx="180" cy="100" r="6" fill="#E67E22"/>
+  <rect x="186" y="94" width="2" height="16" fill="#E67E22"/>
+  
+  <!-- List lines representing setlist -->
+  <rect x="60" y="200" width="40" height="3" fill="#ECF0F1" rx="1"/>
+  <rect x="60" y="210" width="50" height="3" fill="#ECF0F1" rx="1"/>
+  <rect x="60" y="220" width="35" height="3" fill="#ECF0F1" rx="1"/>
+  
+  <rect x="150" y="200" width="40" height="3" fill="#ECF0F1" rx="1"/>
+  <rect x="150" y="210" width="30" height="3" fill="#ECF0F1" rx="1"/>
+  <rect x="150" y="220" width="45" height="3" fill="#ECF0F1" rx="1"/>
+</svg>
