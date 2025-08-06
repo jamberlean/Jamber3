@@ -57,12 +57,10 @@ class EmbeddedAudioPlayer {
             return;
         }
 
-        console.log('Initializing audio player for song ID:', this.songId);
 
         // Use local server endpoint to serve audio files
         const audioSrc = `http://localhost:8081/audio/${this.songId}`;
         
-        console.log('Audio source URL:', audioSrc);
 
         try {
             this.howl = new Howl({
@@ -78,34 +76,28 @@ class EmbeddedAudioPlayer {
                     withCredentials: false
                 },
                 onload: () => {
-                    console.log('Audio loaded successfully:', audioSrc);
                     this.updateControls();
                     this.updateTimeDisplay();
                 },
                 onloadstart: () => {
-                    console.log('Audio load started');
                 },
                 onplay: () => {
-                    console.log('Audio playing');
                     this.isPlaying = true;
                     this.updateControls();
                     this.startProgressUpdates();
                 },
                 onpause: () => {
-                    console.log('Audio paused');
                     this.isPlaying = false;
                     this.updateControls();
                     this.stopProgressUpdates();
                 },
                 onstop: () => {
-                    console.log('Audio stopped');
                     this.isPlaying = false;
                     this.updateControls();
                     this.stopProgressUpdates();
                     this.updateProgress(0);
                 },
                 onend: () => {
-                    console.log('Audio ended');
                     this.isPlaying = false;
                     this.updateControls();
                     this.stopProgressUpdates();
@@ -120,7 +112,6 @@ class EmbeddedAudioPlayer {
                 }
             });
             
-            console.log('Howl instance created successfully');
             
         } catch (error) {
             console.error('Error creating Howl instance:', error);
@@ -294,7 +285,6 @@ class EmbeddedAudioPlayer {
         // Update preset button states
         this.updateSpeedPresetButtons();
 
-        console.log('Speed changed to:', this.speed + 'x');
     }
 
     /**
@@ -314,7 +304,6 @@ class EmbeddedAudioPlayer {
 
         // Note: Howler.js doesn't support pitch shifting directly
         // This would require additional audio processing libraries
-        console.log('Pitch set to:', this.pitch + ' semitones (UI only - pitch shifting not implemented)');
     }
 
     /**
@@ -344,7 +333,6 @@ class EmbeddedAudioPlayer {
         
         this.loopPointA = this.howl.seek();
         this.updateLoopPointDisplay();
-        console.log('Loop point A set at:', this.formatTime(this.loopPointA));
     }
 
     /**
@@ -355,7 +343,6 @@ class EmbeddedAudioPlayer {
         
         this.loopPointB = this.howl.seek();
         this.updateLoopPointDisplay();
-        console.log('Loop point B set at:', this.formatTime(this.loopPointB));
     }
 
     /**
@@ -369,7 +356,6 @@ class EmbeddedAudioPlayer {
 
         this.isLooping = !this.isLooping;
         this.updateLoopDisplay();
-        console.log('Loop toggled:', this.isLooping ? 'ON' : 'OFF');
     }
 
     /**
@@ -381,7 +367,6 @@ class EmbeddedAudioPlayer {
         this.isLooping = false;
         this.updateLoopPointDisplay();
         this.updateLoopDisplay();
-        console.log('Loop points cleared');
     }
 
     /**

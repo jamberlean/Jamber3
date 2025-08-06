@@ -30,7 +30,6 @@ class DatabaseService {
             // Migrate from JSON if exists and database is empty
             this.migrateFromJSON();
 
-            console.log('Database initialized successfully');
         } catch (error) {
             console.error('Error initializing database:', error);
             this.db = null;
@@ -44,17 +43,14 @@ class DatabaseService {
             const songCount = this.db.prepare('SELECT COUNT(*) as count FROM songs').get();
             
             if (songCount.count > 0) {
-                console.log('SQLite database already has data, skipping JSON migration');
                 return;
             }
 
             // Check if JSON file exists
             if (!fs.existsSync(JSON_BACKUP_FILE)) {
-                console.log('No JSON file found, starting with empty database');
                 return;
             }
 
-            console.log('Migrating data from JSON to SQLite...');
             const jsonData = JSON.parse(fs.readFileSync(JSON_BACKUP_FILE, 'utf8'));
 
             // Migrate songs
@@ -88,7 +84,6 @@ class DatabaseService {
                 });
 
                 insertMany(jsonData.songs);
-                console.log(`Migrated ${jsonData.songs.length} songs to SQLite`);
             }
 
             // Migrate scan directories

@@ -309,6 +309,7 @@ main {
 .tree-item.song {
     padding-left: 30px;
     color: #6c757d;
+    cursor: pointer;
 }
 
 .tree-item.folder {
@@ -484,6 +485,38 @@ main {
 .empty-state p {
     font-size: 14px;
     max-width: 300px;
+}
+
+/* Error State Styles */
+.audio-error {
+    text-align: center;
+    padding: 20px;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    margin: 10px 0;
+    color: #856404;
+}
+
+.audio-error p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+.audio-error p:first-child {
+    font-weight: 600;
+    color: #721c24;
+}
+
+/* Dark theme for error states */
+body.dark-theme .audio-error {
+    background: #3a2f1a;
+    border-color: #5d4e37;
+    color: #f4d03f;
+}
+
+body.dark-theme .audio-error p:first-child {
+    color: #ff6b6b;
 }
 
 /* Modal Styles */

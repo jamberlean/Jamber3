@@ -7,54 +7,7 @@ const ResourceFinder = require('./resource-finder');
 const MP3Scanner = require('./mp3-scanner');
 const MetadataExtractor = require('./metadata-extractor');
 const ConfigManager = require('./config-manager');
-
-// Setup file logging
-const LOG_FILE = path.join(__dirname, 'errors.log');
-
-// Store original console functions first
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-const originalConsoleWarn = console.warn;
-
-function logError(message, data = null) {
-    const timestamp = new Date().toISOString();
-    let logEntry = `[${timestamp}] [ERROR] ${message}`;
-    
-    if (data) {
-        logEntry += `\nData: ${JSON.stringify(data, null, 2)}`;
-    }
-    
-    logEntry += '\n';
-    
-    try {
-        fs.appendFileSync(LOG_FILE, logEntry);
-    } catch (error) {
-        // Don't use console.error here to avoid recursion
-        originalConsoleError('Failed to write to log file:', error);
-    }
-    
-    // Also log to console using original function
-    originalConsoleError(`[ERROR] ${message}`, data || '');
-}
-
-// Override console.error to also log to file (but avoid recursion)
-
-let isLogging = false; // Prevent infinite recursion
-
-console.error = function(...args) {
-    if (!isLogging) {
-        isLogging = true;
-        try {
-            fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] [ERROR] ${args.join(' ')}\n`);
-        } catch (error) {
-            // Ignore log file errors to prevent recursion
-        }
-        isLogging = false;
-    }
-    originalConsoleError.apply(console, args);
-};
-
-// Initialize error log file
+const errorLogger = require('./error-logger');
 console.log('=== JAMBER3 SERVER STARTING ===');
 console.log(`Server started at ${new Date().toISOString()}`);
 console.log(`Working directory: ${__dirname}`);
@@ -336,10 +289,9 @@ app.post('/api/scan/discover', async (req, res) => {
         
         res.json(results);
     } catch (error) {
-        logError('Error discovering music:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
+        errorLogger.logError('Server', 'musicDiscovery', error, {
+            endpoint: '/discover-music',
+            method: 'GET'
         });
         
         // Always reset state after error to prevent stuck state
@@ -358,7 +310,11 @@ app.post('/api/scan/process', async (req, res) => {
         const { directories } = req.body;
         
         if (!directories || !Array.isArray(directories)) {
-            logError('Invalid directories parameter', { directories, type: typeof directories });
+            errorLogger.logError('Server', 'invalidDirectories', new Error('Invalid directories parameter'), {
+                directories: directories,
+                type: typeof directories,
+                endpoint: '/scan-music'
+            });
             return res.status(400).json({ error: 'Directories array is required' });
         }
 
@@ -366,18 +322,14 @@ app.post('/api/scan/process', async (req, res) => {
         const allFiles = [];
         for (const dir of directories) {
             try {
-                console.log(`Scanning directory: ${dir.path || dir}`);
                 const dirPath = typeof dir === 'string' ? dir : dir.path;
                 
                 // Check if directory is excluded
                 if (configManager.isPathExcluded(dirPath)) {
-                    console.log(`Skipping excluded directory: ${dirPath}`);
                     continue;
                 }
                 
-                console.log(`Calling scanDirectoryForMusic with path: "${dirPath}"`);
                 const scanResult = await mp3Scanner.scanDirectoryForMusic(dirPath);
-                console.log(`scanDirectoryForMusic returned result with ${scanResult.fileCount} files`);
                 
                 // Extract file paths from the directory structure
                 const dirFiles = mp3Scanner.getAllMusicFiles(scanResult.directories);
@@ -387,14 +339,12 @@ app.post('/api/scan/process', async (req, res) => {
                 const excludedCount = dirFiles.length - filteredFiles.length;
                 
                 allFiles.push(...filteredFiles);
-                console.log(`Found ${dirFiles.length} files in ${dirPath}, ${excludedCount} excluded, ${filteredFiles.length} included`);
             } catch (dirError) {
                 console.error(`Error scanning directory ${dir.path || dir}:`, dirError);
                 // Continue with other directories instead of failing completely
             }
         }
 
-        console.log(`Total files found: ${allFiles.length}`);
 
         // Reload configuration to pick up any changes to excluded paths
         configManager.reloadConfig();
@@ -402,10 +352,8 @@ app.post('/api/scan/process', async (req, res) => {
         // Clean up songs from excluded paths before processing new files
         const config = configManager.getConfig();
         const excludedPaths = config.scan_directories.excluded_paths || [];
-        console.log(`Current excluded paths: ${excludedPaths.length} paths`);
         const removedCount = db.cleanupExcludedPaths(excludedPaths);
         if (removedCount > 0) {
-            console.log(`Cleaned up ${removedCount} songs from excluded paths`);
         }
 
         // Filter out files that already exist in database FIRST
@@ -417,15 +365,12 @@ app.post('/api/scan/process', async (req, res) => {
             }
         }
 
-        console.log(`Files already in database: ${allFiles.length - unprocessedFiles.length}`);
-        console.log(`Unprocessed files: ${unprocessedFiles.length}`);
 
         // Limit processing for very large collections to prevent timeouts
         const maxFiles = 1000; // Process max 1000 files per request
         const filesToProcess = unprocessedFiles.slice(0, maxFiles);
         
         if (unprocessedFiles.length > maxFiles) {
-            console.log(`Large collection of unprocessed files (${unprocessedFiles.length}). Processing first ${maxFiles} files.`);
         }
 
         // Extract metadata for unprocessed files
@@ -434,10 +379,9 @@ app.post('/api/scan/process', async (req, res) => {
             try {
                 songsMetadata = await metadataExtractor.extractBatchMetadata(filesToProcess);
             } catch (metadataError) {
-                logError('Error during metadata extraction', {
-                    message: metadataError.message,
-                    stack: metadataError.stack,
-                    filesCount: filesToProcess.length
+                errorLogger.logError('Server', 'metadataExtraction', metadataError, {
+                    filesCount: filesToProcess.length,
+                    endpoint: '/scan-music'
                 });
                 throw metadataError;
             }
@@ -686,9 +630,6 @@ app.put('/api/config/paths', (req, res) => {
         // The user would need to manually update the tablary-config.json file
         // For now, we'll return success but note that changes are temporary
         
-        console.log('Path configuration updated (temporary - not saved to file):');
-        console.log('Enabled paths:', enabled_paths);
-        console.log('Excluded paths:', excluded_paths);
         
         res.json({ 
             success: true, 

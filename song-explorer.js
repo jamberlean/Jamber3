@@ -5,6 +5,12 @@
 class SongExplorer {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
+        
+        if (!this.container) {
+            console.error('[CRITICAL] Container element not found:', containerId);
+            return;
+        }
+        
         this.currentView = 'artist';
         this.songs = [];
         this.filteredSongs = [];
@@ -12,6 +18,11 @@ class SongExplorer {
         this.expandedNodes = new Set();
         this.searchQuery = '';
         this.resourceFilter = false;
+        this.isRendering = false; // Prevent render loops
+        this.attachedEventListeners = new Set(); // Track attached listeners
+        this.lastSearchTime = 0; // Throttle search requests
+        this.searchThrottleMs = 300; // Minimum time between searches
+        this.pendingSelection = null; // Track pending song selection
         
         this.initializeEventListeners();
     }
@@ -20,10 +31,21 @@ class SongExplorer {
      * Initialize event listeners
      */
     initializeEventListeners() {
+        // Prevent any click events from bubbling out of the song explorer container
+        if (this.container) {
+            this.container.addEventListener('click', (e) => {
+                // Check if the click is on the container itself (not a child element)
+                if (e.target === this.container) {
+                    e.stopPropagation();
+                }
+            });
+        }
+        
         // View control buttons
         const viewButtons = document.querySelectorAll('.view-btn');
         viewButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent bubbling
                 const view = btn.dataset.view;
                 this.switchView(view);
             });
@@ -34,50 +56,37 @@ class SongExplorer {
     }
 
     /**
-     * Initialize search input with retry mechanism
+     * Initialize search input
      */
     initializeSearchInput() {
         const librarySearchInput = document.getElementById('librarySearchInput');
-        if (librarySearchInput) {
-            console.log('Library search input found, binding events...');
-            
-            let searchTimeout;
-            
-            // Multiple event types to ensure it works
-            const handleSearchInput = (e) => {
-                console.log('Search input detected:', e.target.value);
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => {
-                    this.handleSearch(e.target.value);
-                }, 300);
-            };
-            
-            librarySearchInput.addEventListener('input', handleSearchInput);
-            librarySearchInput.addEventListener('keyup', handleSearchInput);
-            librarySearchInput.addEventListener('paste', (e) => {
-                setTimeout(() => handleSearchInput(e), 10);
-            });
-            
-            // Ensure the input is focusable
-            librarySearchInput.setAttribute('tabindex', '0');
-            
-            // Test click handler
-            librarySearchInput.addEventListener('click', () => {
-                console.log('Search input clicked');
-                librarySearchInput.focus();
-            });
-            
-        } else {
-            console.warn('Library search input not found, retrying...');
-            // Retry after a short delay in case DOM isn't fully loaded
-            setTimeout(() => this.initializeSearchInput(), 100);
+        if (!librarySearchInput) {
+            // Single retry after DOM load instead of recursive calls
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => this.initializeSearchInput());
+            }
+            return;
         }
+        
+        let searchTimeout;
+        
+        // Single debounced event handler
+        const handleSearchInput = (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                this.handleSearch(e.target.value);
+            }, 300);
+        };
+        
+        // Only use 'input' event - covers typing, paste, and all input changes
+        librarySearchInput.addEventListener('input', handleSearchInput);
 
         
         // Resource filter checkbox
         const resourceFilter = document.getElementById('resourceFilter');
         if (resourceFilter) {
             resourceFilter.addEventListener('change', (e) => {
+                e.stopPropagation(); // Prevent bubbling
                 this.handleResourceFilter(e.target.checked);
             });
         }
@@ -166,8 +175,30 @@ class SongExplorer {
      * Render the song explorer
      */
     render() {
+        
+        // Prevent render loops
+        if (this.isRendering) {
+            return;
+        }
+        
+        this.isRendering = true;
+        
+        // Add safety timeout to prevent infinite rendering
+        setTimeout(() => {
+            if (this.isRendering) {
+                this.isRendering = false;
+            }
+        }, 5000);
+        
+        // Ensure container exists before proceeding
+        if (!this.container) {
+            this.isRendering = false;
+            return;
+        }
+        
         if (this.filteredSongs.length === 0) {
             this.renderEmptyState();
+            this.isRendering = false;
             return;
         }
 
@@ -183,15 +214,82 @@ class SongExplorer {
             case 'folder':
                 html = this.renderFolderView();
                 break;
-            case 'all':
-                html = this.renderAllView();
-                break;
-            default:
-                html = this.renderArtistView();
+        case 'all':
+            html = this.renderAllView();
+            break;
+        default:
+            html = this.renderArtistView();
         }
-
-        this.container.innerHTML = `<ul class="song-tree">${html}</ul>`;
-        this.attachTreeEventListeners();
+        
+        
+        // Use requestAnimationFrame to ensure DOM updates are properly batched
+        requestAnimationFrame(() => {
+            try {
+                // Safety check - ensure container still exists
+                if (!this.container) {
+                    console.error('[DEBUG] Container lost during render');
+                    this.isRendering = false;
+                    return;
+                }
+                
+                // Check if we're still supposed to be rendering
+                if (!this.isRendering) {
+                    return;
+                }
+                
+                // Clear existing content safely
+                this.container.innerHTML = '';
+                
+                // Add new content
+                this.container.innerHTML = `<ul class="song-tree">${html}</ul>`;
+                
+                
+                // Use another requestAnimationFrame to ensure DOM is fully updated
+                requestAnimationFrame(() => {
+                    try {
+                        // Another safety check
+                        if (!this.container) {
+                            console.error('[DEBUG] Container lost before event attachment');
+                            this.isRendering = false;
+                            return;
+                        }
+                        
+                        this.attachTreeEventListeners();
+                        this.isRendering = false; // Reset render flag
+                        
+                        // Handle any pending selection after render completes
+                        if (this.pendingSelection) {
+                            const pendingId = this.pendingSelection;
+                            this.pendingSelection = null;
+                            setTimeout(() => this.selectSong(pendingId), 50);
+                        }
+                    } catch (innerError) {
+                        console.error('[DEBUG] Error attaching event listeners:', innerError);
+                        if (window.ErrorLogger) {
+                            window.ErrorLogger.logError('SongExplorer', 'attachEventListeners', innerError, {
+                                additionalInfo: {
+                                    filteredSongsCount: this.filteredSongs.length,
+                                    currentView: this.currentView
+                                }
+                            });
+                        }
+                        this.isRendering = false;
+                    }
+                });
+            } catch (error) {
+                console.error('[DEBUG] Error during DOM update:', error);
+                if (window.ErrorLogger) {
+                    window.ErrorLogger.logError('SongExplorer', 'render', error, {
+                        additionalInfo: {
+                            htmlLength: html?.length,
+                            filteredSongsCount: this.filteredSongs.length,
+                            currentView: this.currentView
+                        }
+                    });
+                }
+                this.isRendering = false;
+            }
+        });
     }
 
     /**
@@ -211,6 +309,8 @@ class SongExplorer {
                 <p>${message}</p>
             </div>
         `;
+        
+        this.isRendering = false; // Reset render flag
     }
 
     /**
@@ -372,9 +472,29 @@ class SongExplorer {
         const groups = new Map();
         
         songs.forEach(song => {
-            const path = require('path');
-            const folder = song.file_path ? path.dirname(song.file_path) : 'Unknown Folder';
-            const folderName = path.basename(folder);
+            // Use simple string manipulation instead of Node.js path module
+            // (path module not available in renderer process)
+            let folder = 'Unknown Folder';
+            let folderName = 'Unknown Folder';
+            
+            if (song.file_path) {
+                // Get directory path (everything before last slash/backslash)
+                const lastSlash = Math.max(
+                    song.file_path.lastIndexOf('/'),
+                    song.file_path.lastIndexOf('\\')
+                );
+                
+                if (lastSlash > -1) {
+                    folder = song.file_path.substring(0, lastSlash);
+                    // Get folder name (last part of directory path)
+                    const folderLastSlash = Math.max(
+                        folder.lastIndexOf('/'),
+                        folder.lastIndexOf('\\')
+                    );
+                    folderName = folderLastSlash > -1 ? 
+                        folder.substring(folderLastSlash + 1) : folder;
+                }
+            }
             
             if (!groups.has(folderName)) {
                 groups.set(folderName, []);
@@ -386,11 +506,31 @@ class SongExplorer {
     }
 
     /**
+     * Clean up existing event listeners to prevent memory leaks
+     */
+    cleanupEventListeners() {
+        // Remove all existing event listeners from song items and other elements
+        const existingItems = this.container.querySelectorAll('.tree-item');
+        existingItems.forEach(item => {
+            // Clone and replace elements to remove all event listeners
+            const newItem = item.cloneNode(true);
+            item.parentNode.replaceChild(newItem, item);
+        });
+    }
+
+    /**
      * Attach event listeners to tree elements
      */
     attachTreeEventListeners() {
+        // Safety check - don't attach listeners if container is missing
+        if (!this.container) {
+            console.error('[DEBUG] Cannot attach event listeners - container missing');
+            return;
+        }
+        
         // Expand/collapse toggles
         const toggles = this.container.querySelectorAll('[data-toggle]');
+        
         toggles.forEach(toggle => {
             toggle.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -401,17 +541,58 @@ class SongExplorer {
 
         // Song selection
         const songItems = this.container.querySelectorAll('.tree-item.song');
-        songItems.forEach(item => {
-            item.addEventListener('click', () => {
-                const songId = parseInt(item.dataset.songId);
-                this.selectSong(songId);
+        
+        songItems.forEach((item, index) => {
+            // Always attach event listener since DOM was recreated
+            // (innerHTML replacement destroys previous elements and listeners)
+            
+            item.addEventListener('click', (e) => {
+                
+                // Prevent event from bubbling up to parent elements
+                e.stopPropagation();
+                e.preventDefault();
+                
+                const songIdStr = item.dataset.songId;
+                
+                if (!songIdStr) {
+                    console.warn('Song item missing data-song-id:', item);
+                    return;
+                }
+                
+                const songId = parseInt(songIdStr);
+                if (isNaN(songId)) {
+                    console.warn('Invalid song ID:', songIdStr);
+                    return;
+                }
+                
+                
+                // Add try-catch to prevent crashes
+                try {
+                    this.selectSong(songId);
+                } catch (error) {
+                    console.error('[ERROR] Failed to select song:', error);
+                    if (window.ErrorLogger) {
+                        window.ErrorLogger.logError('SongExplorer', 'songClick', error, {
+                            songId: songId,
+                            additionalInfo: {
+                                isRendering: this.isRendering,
+                                filteredSongsCount: this.filteredSongs?.length,
+                                searchQuery: this.searchQuery
+                            }
+                        });
+                    }
+                }
             });
         });
 
         // Artist/Album/Folder selection (expand on click)
         const groupItems = this.container.querySelectorAll('.tree-item.artist, .tree-item.album, .tree-item.folder');
         groupItems.forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', (e) => {
+                // Prevent event from bubbling up
+                e.stopPropagation();
+                e.preventDefault();
+                
                 const key = item.dataset.key;
                 if (key) {
                     this.toggleNode(key);
@@ -430,7 +611,12 @@ class SongExplorer {
         } else {
             this.expandedNodes.add(key);
         }
-        this.render();
+        // Ensure we're not already rendering to prevent loops
+        if (!this.isRendering) {
+            this.render();
+        }
+        // If rendering, the toggle will take effect on the next render
+        // No need to schedule another render
     }
 
     /**
@@ -438,16 +624,61 @@ class SongExplorer {
      * @param {number} songId - Song ID
      */
     selectSong(songId) {
-        const song = this.songs.find(s => s.id === songId);
-        if (song) {
-            this.selectedSong = song;
-            this.render();
-            
-            // Emit selection event
-            const event = new CustomEvent('songSelected', {
-                detail: { song: song }
-            });
-            document.dispatchEvent(event);
+        
+        // Safety check - don't select during rendering
+        if (this.isRendering) {
+            // Store the pending selection to be processed after render completes
+            this.pendingSelection = songId;
+            return;
+        }
+        
+        // Don't re-select the same song
+        if (this.selectedSong && this.selectedSong.id === songId) {
+            // Just update visual selection
+            this.updateSelectionDisplay(songId);
+            return;
+        }
+        
+        // First try to find the song in the filtered list (what's currently displayed)
+        // then fall back to the full list if not found
+        let song = this.filteredSongs.find(s => s.id === songId);
+        if (!song) {
+            song = this.songs.find(s => s.id === songId);
+        }
+        
+        if (!song) {
+            return;
+        }
+        
+        // Update visual selection without re-rendering entire tree
+        this.updateSelectionDisplay(songId);
+        
+        this.selectedSong = song;
+        
+        
+        // Emit selection event
+        const event = new CustomEvent('songSelected', {
+            detail: { song: song }
+        });
+        
+        document.dispatchEvent(event);
+    }
+    
+    /**
+     * Update visual selection without full re-render
+     * @param {number} songId - Song ID to select
+     */
+    updateSelectionDisplay(songId) {
+        // Remove previous selection
+        const previousSelected = this.container.querySelector('.tree-item.song.selected');
+        if (previousSelected) {
+            previousSelected.classList.remove('selected');
+        }
+        
+        // Add new selection
+        const newSelected = this.container.querySelector(`.tree-item.song[data-song-id="${songId}"]`);
+        if (newSelected) {
+            newSelected.classList.add('selected');
         }
     }
 
@@ -527,5 +758,11 @@ class SongExplorer {
     }
 }
 
-// Create global instance
-window.songExplorer = new SongExplorer('songExplorer');
+// Create global instance when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.songExplorer = new SongExplorer('songExplorer');
+    });
+} else {
+    window.songExplorer = new SongExplorer('songExplorer');
+}

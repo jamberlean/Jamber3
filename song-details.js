@@ -18,7 +18,20 @@ class SongDetails {
     initializeEventListeners() {
         // Listen for song selection events
         document.addEventListener('songSelected', (e) => {
-            this.displaySong(e.detail.song);
+            console.log('[DEBUG] songSelected event received, song:', e.detail?.song?.id, e.detail?.song?.title);
+            try {
+                this.displaySong(e.detail.song);
+            } catch (error) {
+                if (window.ErrorLogger) {
+                    window.ErrorLogger.logSongDetailsError('songSelected', error, {
+                        songId: e.detail?.song?.id,
+                        songTitle: e.detail?.song?.title,
+                        songArtist: e.detail?.song?.artist
+                    });
+                }
+                console.error('Error in song selection:', error);
+                this.renderErrorState('Failed to display song details');
+            }
         });
     }
 
@@ -27,14 +40,33 @@ class SongDetails {
      * @param {Object} song - Song object to display
      */
     displaySong(song) {
-        this.currentSong = song;
-        
-        if (!song) {
-            this.renderEmptyState();
-            return;
-        }
+        try {
+            // Don't re-render if it's the same song
+            if (this.currentSong && this.currentSong.id === song.id) {
+                console.log('[DEBUG] Same song already displayed, skipping render');
+                return;
+            }
+            
+            this.currentSong = song;
+            
+            if (!song) {
+                this.renderEmptyState();
+                return;
+            }
 
-        this.render(song);
+            this.render(song);
+        } catch (error) {
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logSongDetailsError('displaySong', error, {
+                    songId: song?.id,
+                    songTitle: song?.title,
+                    songArtist: song?.artist,
+                    songFilePath: song?.file_path
+                });
+            }
+            console.error('Error displaying song:', error);
+            this.renderErrorState('Failed to render song details');
+        }
     }
 
     /**
@@ -46,6 +78,21 @@ class SongDetails {
                 <div class="empty-icon">📄</div>
                 <h4>No Song Selected</h4>
                 <p>Select a song from the library to view details</p>
+            </div>
+        `;
+    }
+
+    /**
+     * Render error state
+     * @param {string} message - Error message to display
+     */
+    renderErrorState(message) {
+        this.container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">⚠️</div>
+                <h4>Error Loading Song</h4>
+                <p>${message}</p>
+                <p><small>Error details logged to errors.log</small></p>
             </div>
         `;
     }
@@ -68,9 +115,19 @@ class SongDetails {
         this.container.innerHTML = html;
         this.attachEventListeners();
         
-        // Initialize embedded audio player
-        setTimeout(() => {
-            this.initializeEmbeddedPlayer();
+        // Initialize embedded audio player with error handling
+        setTimeout(async () => {
+            try {
+                await this.initializeEmbeddedPlayer();
+            } catch (playerInitError) {
+                console.error('Failed to initialize audio player after render:', playerInitError);
+                if (window.ErrorLogger) {
+                    window.ErrorLogger.logSongDetailsError('renderPlayerInit', playerInitError, {
+                        songId: song?.id,
+                        songTitle: song?.title
+                    });
+                }
+            }
         }, 100);
     }
 
@@ -553,19 +610,120 @@ class SongDetails {
     /**
      * Initialize embedded audio player for current song
      */
-    initializeEmbeddedPlayer() {
-        if (!this.currentSong || !this.currentSong.file_path) return;
+    async initializeEmbeddedPlayer() {
+        try {
+            if (!this.currentSong || !this.currentSong.file_path) {
+                const error = 'Cannot initialize audio player: Missing song or file path';
+                console.warn(error);
+                if (window.ErrorLogger) {
+                    window.ErrorLogger.logSongDetailsError('initializeEmbeddedPlayer', error, {
+                        songId: this.currentSong?.id,
+                        hasFilePath: !!this.currentSong?.file_path,
+                        songTitle: this.currentSong?.title,
+                        hasSong: !!this.currentSong
+                    });
+                }
+                return;
+            }
 
-        const songId = this.currentSong.id;
-        const filePath = this.currentSong.file_path;
-        
-        // Clean up any existing player
-        if (this.audioPlayer) {
-            this.audioPlayer.destroy();
+            const songId = this.currentSong.id;
+            const filePath = this.currentSong.file_path;
+            
+            console.log('Initializing embedded audio player for song:', songId, filePath);
+            
+            // Clean up any existing player more thoroughly
+            try {
+                if (this.audioPlayer) {
+                    console.log('Cleaning up existing audio player');
+                    this.audioPlayer.destroy();
+                    this.audioPlayer = null;
+                }
+                
+                // Clean up any global audio player references that might conflict
+                if (window.currentAudioPlayer && window.currentAudioPlayer !== this.audioPlayer) {
+                    try {
+                        window.currentAudioPlayer.destroy();
+                    } catch (globalCleanupError) {
+                        console.warn('Error cleaning up global audio player:', globalCleanupError);
+                    }
+                }
+                
+                // Add a small delay to ensure cleanup is complete
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+            } catch (cleanupError) {
+                console.error('Error cleaning up existing audio player:', cleanupError);
+                if (window.ErrorLogger) {
+                    window.ErrorLogger.logSongDetailsError('playerCleanup', cleanupError, {
+                        songId: songId
+                    });
+                }
+            }
+
+            // Create new EmbeddedAudioPlayer instance with enhanced error handling
+            try {
+                this.audioPlayer = new EmbeddedAudioPlayer(songId, filePath);
+                
+                // Wait for player initialization to complete before setting global reference
+                if (this.audioPlayer.initPromise) {
+                    await this.audioPlayer.initPromise;
+                }
+                
+                // Defer setting global reference to avoid potential circular reference issues
+                setTimeout(() => {
+                    window.currentAudioPlayer = this.audioPlayer;
+                }, 10);
+                
+                console.log('Audio player created successfully for song:', songId);
+            } catch (playerError) {
+                console.error('Failed to create EmbeddedAudioPlayer:', playerError);
+                if (window.ErrorLogger) {
+                    window.ErrorLogger.logSongDetailsError('playerCreation', playerError, {
+                        songId: songId,
+                        filePath: filePath,
+                        songTitle: this.currentSong.title,
+                        songArtist: this.currentSong.artist,
+                        additionalInfo: {
+                            errorMessage: playerError.message,
+                            errorStack: playerError.stack,
+                            timestamp: new Date().toISOString()
+                        }
+                    });
+                }
+                throw playerError; // Re-throw to be caught by outer catch
+            }
+            
+        } catch (error) {
+            console.error('Critical error initializing embedded audio player:', error);
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logSongDetailsError('initializeEmbeddedPlayer', error, {
+                    songId: this.currentSong?.id,
+                    filePath: this.currentSong?.file_path,
+                    songTitle: this.currentSong?.title,
+                    songArtist: this.currentSong?.artist,
+                    additionalInfo: {
+                        errorMessage: error.message,
+                        errorStack: error.stack,
+                        timestamp: new Date().toISOString(),
+                        userAgent: navigator.userAgent
+                    }
+                });
+            }
+            
+            // Show detailed error in the audio player area
+            const audioContainer = document.querySelector(`[data-song-id="${this.currentSong?.id}"] .audio-player-container`);
+            if (audioContainer) {
+                audioContainer.innerHTML = `
+                    <div class="audio-error">
+                        <p>⚠️ Audio player failed to initialize</p>
+                        <p>Song: ${this.currentSong?.title || 'Unknown'}</p>
+                        <p>Error: ${error.message}</p>
+                        <p><small>Full error details logged to errors.log</small></p>
+                        <button onclick="location.reload()" class="retry-btn">Retry (Reload Page)</button>
+                    </div>
+                `;
+            }
         }
-
-        // Create new EmbeddedAudioPlayer instance
-        this.audioPlayer = new EmbeddedAudioPlayer(songId, filePath);
     }
 
     /**

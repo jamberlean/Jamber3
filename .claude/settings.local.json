@@ -23,7 +23,12 @@
       "Bash(git remote add:*)",
       "Bash(git add:*)",
       "Bash(git config:*)",
-      "Bash(git config user.name \"Alan Belanger\")"
+      "Bash(git config user.name \"Alan Belanger\")",
+      "Bash(test:*)",
+      "Bash(copy audio-player.js audio-player-tone-backup.js)",
+      "Bash(npm uninstall:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
