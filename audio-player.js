@@ -17,6 +17,13 @@ class EmbeddedAudioPlayer {
         this.waveformContext = null;
         this.analyser = null;
         
+        // SoundTouch integration
+        this.audioContext = null;
+        this.soundTouch = null;
+        this.gainNode = null;
+        this.audioBuffer = null;
+        this.usePitchShift = false;
+        
         // DOM elements with song-specific IDs
         this.playBtn = document.getElementById(`playBtn-${songId}`);
         this.pauseBtn = document.getElementById(`pauseBtn-${songId}`);
@@ -78,6 +85,7 @@ class EmbeddedAudioPlayer {
                 onload: () => {
                     this.updateControls();
                     this.updateTimeDisplay();
+                    this.initializeSoundTouch();
                 },
                 onloadstart: () => {
                 },
@@ -116,6 +124,71 @@ class EmbeddedAudioPlayer {
         } catch (error) {
             console.error('Error creating Howl instance:', error);
             this.showError(`Failed to initialize audio player: ${error.message}`);
+        }
+    }
+
+    /**
+     * Initialize SoundTouch for pitch shifting
+     */
+    async initializeSoundTouch() {
+        try {
+            // Create audio context if it doesn't exist
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.gainNode = this.audioContext.createGain();
+                this.gainNode.connect(this.audioContext.destination);
+            }
+
+            // Load audio buffer for SoundTouch processing
+            const audioSrc = `http://localhost:8081/audio/${this.songId}`;
+            const response = await fetch(audioSrc);
+            const arrayBuffer = await response.arrayBuffer();
+            this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            
+            console.log('SoundTouch initialized for pitch shifting');
+        } catch (error) {
+            console.error('Error initializing SoundTouch:', error);
+            // Fallback to Howler-only mode
+            this.usePitchShift = false;
+        }
+    }
+
+    /**
+     * Create SoundTouch PitchShifter when needed
+     */
+    createPitchShifter() {
+        if (this.soundTouch) {
+            this.soundTouch.off(); // Remove existing listeners
+        }
+        
+        if (!this.audioBuffer || !window.SoundTouchJS) {
+            console.warn('SoundTouchJS or audio buffer not available');
+            return null;
+        }
+
+        try {
+            // Create new PitchShifter instance
+            this.soundTouch = new window.SoundTouchJS.PitchShifter(
+                this.audioContext, 
+                this.audioBuffer, 
+                1024 // Buffer size
+            );
+
+            // Set initial parameters
+            this.soundTouch.tempo = this.speed;
+            this.soundTouch.pitch = Math.pow(2, this.pitch / 12); // Convert semitones to pitch ratio
+
+            // Listen for playback events
+            this.soundTouch.on('play', (detail) => {
+                // Update progress based on SoundTouch timing
+                const progress = detail.percentagePlayed;
+                this.updateProgress(detail.timePlayed);
+            });
+
+            return this.soundTouch;
+        } catch (error) {
+            console.error('Error creating PitchShifter:', error);
+            return null;
         }
     }
 
@@ -205,6 +278,18 @@ class EmbeddedAudioPlayer {
      * Play the current song
      */
     play() {
+        // Use SoundTouch if pitch shifting is active, otherwise use Howler
+        if (this.pitch !== 0 && this.audioBuffer) {
+            this.playSoundTouch();
+        } else {
+            this.playHowler();
+        }
+    }
+
+    /**
+     * Play using Howler.js (normal playback)
+     */
+    playHowler() {
         if (!this.howl) {
             console.warn('No audio loaded');
             return;
@@ -219,13 +304,66 @@ class EmbeddedAudioPlayer {
     }
 
     /**
+     * Play using SoundTouch (pitch-shifted playback)
+     */
+    playSoundTouch() {
+        if (!this.audioBuffer) {
+            console.warn('No audio buffer for SoundTouch');
+            this.playHowler(); // Fallback to Howler
+            return;
+        }
+
+        try {
+            // Resume audio context if suspended
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume();
+            }
+
+            // Stop current Howler playback
+            if (this.howl && this.howl.playing()) {
+                this.howl.stop();
+            }
+
+            // Create and configure PitchShifter
+            const shifter = this.createPitchShifter();
+            if (!shifter) {
+                this.playHowler(); // Fallback to Howler
+                return;
+            }
+
+            // Connect to audio output and start playback
+            shifter.connect(this.gainNode);
+            
+            // Manually trigger play events since we're bypassing Howler
+            this.isPlaying = true;
+            this.updateControls();
+            this.startProgressUpdates();
+
+        } catch (error) {
+            console.error('Error playing with SoundTouch:', error);
+            this.playHowler(); // Fallback to Howler
+        }
+    }
+
+    /**
      * Pause playback
      */
     pause() {
-        if (!this.howl) return;
-
         try {
-            this.howl.pause();
+            // Stop SoundTouch if active
+            if (this.soundTouch) {
+                this.soundTouch.disconnect();
+            }
+            
+            // Pause Howler
+            if (this.howl) {
+                this.howl.pause();
+            }
+
+            // Update state
+            this.isPlaying = false;
+            this.updateControls();
+            this.stopProgressUpdates();
         } catch (error) {
             console.error('Error pausing audio:', error);
         }
@@ -235,10 +373,22 @@ class EmbeddedAudioPlayer {
      * Stop playback
      */
     stop() {
-        if (!this.howl) return;
-
         try {
-            this.howl.stop();
+            // Stop SoundTouch if active
+            if (this.soundTouch) {
+                this.soundTouch.disconnect();
+            }
+            
+            // Stop Howler
+            if (this.howl) {
+                this.howl.stop();
+            }
+
+            // Update state
+            this.isPlaying = false;
+            this.updateControls();
+            this.stopProgressUpdates();
+            this.updateProgress(0);
         } catch (error) {
             console.error('Error stopping audio:', error);
         }
@@ -251,8 +401,14 @@ class EmbeddedAudioPlayer {
     setVolume(level) {
         this.volume = Math.max(0, Math.min(1, level));
         
+        // Update Howler volume
         if (this.howl) {
             this.howl.volume(this.volume);
+        }
+
+        // Update SoundTouch volume through gain node
+        if (this.gainNode) {
+            this.gainNode.gain.value = this.volume;
         }
 
         // Update volume slider if it exists
@@ -270,8 +426,14 @@ class EmbeddedAudioPlayer {
     setSpeed(rate) {
         this.speed = Math.max(0.1, Math.min(4.0, rate));
         
+        // Update Howler speed (used when pitch = 0)
         if (this.howl) {
             this.howl.rate(this.speed);
+        }
+
+        // Update SoundTouch tempo (used when pitch != 0)
+        if (this.soundTouch) {
+            this.soundTouch.tempo = this.speed;
         }
 
         // Update speed slider
@@ -284,7 +446,6 @@ class EmbeddedAudioPlayer {
 
         // Update preset button states
         this.updateSpeedPresetButtons();
-
     }
 
     /**
@@ -292,6 +453,7 @@ class EmbeddedAudioPlayer {
      * @param {number} semitones - Pitch shift in semitones (-12 to +12)
      */
     setPitch(semitones) {
+        const oldPitch = this.pitch;
         this.pitch = Math.max(-12, Math.min(12, semitones));
         
         // Update pitch slider
@@ -302,8 +464,19 @@ class EmbeddedAudioPlayer {
         // Update pitch display
         this.updatePitchDisplay();
 
-        // Note: Howler.js doesn't support pitch shifting directly
-        // This would require additional audio processing libraries
+        // If pitch changed and we're playing, restart with new pitch
+        if (this.isPlaying && oldPitch !== this.pitch) {
+            const wasPlaying = this.isPlaying;
+            this.stop();
+            if (wasPlaying) {
+                setTimeout(() => this.play(), 100); // Small delay to allow stop to complete
+            }
+        }
+
+        // Update SoundTouch if it exists
+        if (this.soundTouch) {
+            this.soundTouch.pitch = Math.pow(2, this.pitch / 12); // Convert semitones to pitch ratio
+        }
     }
 
     /**
@@ -675,6 +848,19 @@ class EmbeddedAudioPlayer {
     cleanup() {
         this.stopProgressUpdates();
         
+        // Clean up SoundTouch resources
+        if (this.soundTouch) {
+            this.soundTouch.off(); // Remove event listeners
+            this.soundTouch.disconnect(); // Disconnect from audio graph
+            this.soundTouch = null;
+        }
+
+        if (this.gainNode) {
+            this.gainNode.disconnect();
+            this.gainNode = null;
+        }
+
+        // Clean up Howler
         if (this.howl) {
             this.howl.unload();
             this.howl = null;

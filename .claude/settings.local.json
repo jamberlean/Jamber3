@@ -28,7 +28,8 @@
       "Bash(copy audio-player.js audio-player-tone-backup.js)",
       "Bash(npm uninstall:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

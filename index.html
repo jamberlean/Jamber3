@@ -131,6 +131,10 @@
 
 
     <script src="node_modules/howler/dist/howler.min.js"></script>
+    <script type="module">
+        import { PitchShifter } from './node_modules/soundtouchjs/dist/soundtouch.js';
+        window.SoundTouchJS = { PitchShifter };
+    </script>
     <script src="error-logger.js"></script>
     <script src="global-error-handler.js"></script>
     <script src="progress-indicator.js"></script>
