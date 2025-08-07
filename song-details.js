@@ -288,11 +288,23 @@ class SongDetails {
                 label: 'Lyrics',
                 icon: '📝',
                 url: song.lyrics_url,
-                verified: song.lyrics_verified
+                verified: song.lyrics_verified,
+                hasContent: !!song.lyrics_content
             }
         ];
 
         const resourcesHtml = resources.map(resource => {
+            // Special handling for lyrics
+            if (resource.type === 'lyrics' && resource.hasContent) {
+                return `
+                    <button class="resource-link verified" data-resource="${resource.type}" data-action="show">
+                        <span>${resource.icon}</span>
+                        <span>${resource.label}</span>
+                        <span class="status">✓</span>
+                    </button>
+                `;
+            }
+            
             if (resource.url) {
                 const statusClass = resource.verified ? 'verified' : 'pending';
                 const statusIcon = resource.verified ? '✓' : '⏳';
@@ -305,7 +317,7 @@ class SongDetails {
                 `;
             } else {
                 return `
-                    <button class="resource-link missing" data-resource="${resource.type}">
+                    <button class="resource-link missing" data-resource="${resource.type}" data-action="find">
                         <span>${resource.icon}</span>
                         <span>Find ${resource.label}</span>
                         <span>🔍</span>
@@ -397,6 +409,9 @@ class SongDetails {
      * Attach event listeners to detail elements
      */
     attachEventListeners() {
+        // Remove existing event listeners by cloning and replacing elements
+        this.removeExistingListeners();
+        
         // Action buttons
         const actionButtons = this.container.querySelectorAll('[data-action]');
         actionButtons.forEach(btn => {
@@ -411,7 +426,8 @@ class SongDetails {
         resourceButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const resourceType = btn.dataset.resource;
-                this.handleFindResource(resourceType);
+                const action = btn.dataset.action;
+                this.handleFindResource(resourceType, action);
             });
         });
 
@@ -430,6 +446,18 @@ class SongDetails {
             header.addEventListener('click', () => {
                 this.toggleCollapsibleSection(header);
             });
+        });
+    }
+
+    /**
+     * Remove existing event listeners to prevent duplicates
+     */
+    removeExistingListeners() {
+        // For elements with event listeners, we replace them with clones to remove all listeners
+        const elementsWithListeners = this.container.querySelectorAll('[data-action], [data-resource], .file-path, .collapsible-header');
+        elementsWithListeners.forEach(element => {
+            const clone = element.cloneNode(true);
+            element.parentNode.replaceChild(clone, element);
         });
     }
 
@@ -463,11 +491,29 @@ class SongDetails {
      * Handle find resource requests
      * @param {string} resourceType - Type of resource to find
      */
-    handleFindResource(resourceType) {
+    handleFindResource(resourceType, action = 'find') {
         if (!this.currentSong) return;
 
-        // Emit event for resource finding
-        const event = new CustomEvent('findResource', {
+        let eventType;
+        
+        if (action === 'show' && resourceType === 'lyrics') {
+            // Show existing lyrics content
+            eventType = 'showLyrics';
+        } else {
+            // Find resources via URL search
+            if (resourceType === 'guitar_tabs') {
+                eventType = 'findGuitarTabs';
+            } else if (resourceType === 'bass_tabs') {
+                eventType = 'findBassTabs';
+            } else if (resourceType === 'lyrics') {
+                eventType = 'findLyrics';
+            } else {
+                // Fallback for any unexpected resource types
+                eventType = 'findResource';
+            }
+        }
+
+        const event = new CustomEvent(eventType, {
             detail: {
                 song: this.currentSong,
                 resourceType: resourceType
@@ -793,6 +839,11 @@ class SongDetails {
                 });
                 document.dispatchEvent(event);
                 
+                // Refresh the song list in the left pane
+                if (window.jamber3App) {
+                    window.jamber3App.loadSongs();
+                }
+                
                 // Show success message
                 this.showMessage('Song updated successfully!', 'success');
             } else {
@@ -812,6 +863,7 @@ class SongDetails {
         if (!form) return this.currentSong;
         
         return {
+            id: this.currentSong.id, // Include the song ID for PUT requests
             title: form.querySelector('[name="title"]').value.trim(),
             artist: form.querySelector('[name="artist"]').value.trim(),
             album: form.querySelector('[name="album"]').value.trim(),

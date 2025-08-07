@@ -18,7 +18,6 @@ class SetListApp {
         this.lyricsInput = document.getElementById('lyrics');
         this.mp3Input = document.getElementById('mp3');
         this.tablatureInput = document.getElementById('tablature');
-        this.tablatureContentInput = document.getElementById('tablature-content');
         this.lyricsContentInput = document.getElementById('lyrics-content');
         this.youtubeInput = document.getElementById('youtube');
         
@@ -78,7 +77,6 @@ class SetListApp {
         this.artistInput.value = song.artist || '';
         
         this.tablatureInput.value = song.tablature_url || '';
-        this.tablatureContentInput.value = song.tablature_content || '';
         this.lyricsContentInput.value = song.lyrics_content || '';
         this.youtubeInput.value = song.youtube_url || '';
         
@@ -120,7 +118,6 @@ class SetListApp {
             lyrics_content: formData.get('lyrics-content') || '',
             mp3_path: this.mp3Input.files[0] ? this.mp3Input.files[0].path || this.mp3Input.files[0].name : (this.editingSongId ? this.getCurrentSong().mp3_path : ''),
             tablature_url: formData.get('tablature') || '',
-            tablature_content: formData.get('tablature-content') || '',
             youtube_url: formData.get('youtube') || ''
         };
 
@@ -139,8 +136,8 @@ class SetListApp {
             if (response.ok) {
                 this.closeModal();
                 // Reload songs through the song explorer
-                if (window.tablaryApp) {
-                    window.tablaryApp.loadSongs();
+                if (window.jamber3App) {
+                    window.jamber3App.loadSongs();
                 }
             } else {
                 const error = await response.json();
@@ -187,8 +184,8 @@ class SetListApp {
 
             if (response.ok) {
                 // Reload songs through the song explorer
-                if (window.tablaryApp) {
-                    window.tablaryApp.loadSongs();
+                if (window.jamber3App) {
+                    window.jamber3App.loadSongs();
                 }
             } else {
                 const error = await response.json();
@@ -202,8 +199,8 @@ class SetListApp {
 
     async loadSongs() {
         // This method is kept for backward compatibility but delegates to Jamber3App
-        if (window.tablaryApp) {
-            await window.tablaryApp.loadSongs();
+        if (window.jamber3App) {
+            await window.jamber3App.loadSongs();
         }
     }
 

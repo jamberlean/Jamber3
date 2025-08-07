@@ -38,9 +38,16 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // Console error override to catch console.error calls
 const originalConsoleError = console.error;
+let isLoggingError = false; // Prevent infinite recursion
+
 console.error = function(...args) {
     // Call original console.error
     originalConsoleError.apply(console, args);
+    
+    // Prevent infinite recursion
+    if (isLoggingError) {
+        return;
+    }
     
     // Log to file if it's a significant error
     if (window.ErrorLogger && args.length > 0) {
@@ -56,13 +63,18 @@ console.error = function(...args) {
             errorMessage.toLowerCase().includes('failed') ||
             errorMessage.toLowerCase().includes('error')) {
             
-            window.ErrorLogger.logError('Console', 'error', errorMessage, {
-                additionalInfo: {
-                    args: args,
-                    url: window.location.href,
-                    timestamp: new Date().toISOString()
-                }
-            });
+            isLoggingError = true;
+            try {
+                window.ErrorLogger.logError('Console', 'error', errorMessage, {
+                    additionalInfo: {
+                        args: args,
+                        url: window.location.href,
+                        timestamp: new Date().toISOString()
+                    }
+                });
+            } finally {
+                isLoggingError = false;
+            }
         }
     }
 };

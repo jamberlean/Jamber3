@@ -105,7 +105,11 @@ app.get('/api/songs', async (req, res) => {
 
 app.post('/api/songs', async (req, res) => {
     try {
-        const { title, artist, lyrics_path, mp3_path, tablature_url, youtube_url } = req.body;
+        const { 
+            title, artist, album, lyrics_content,
+            lyrics_path, mp3_path, file_path, file_name,
+            tablature_url, guitar_tab_url, bass_tab_url, lyrics_url, youtube_url 
+        } = req.body;
         
         if (!title || title.trim() === '') {
             return res.status(400).json({ error: 'Song title is required' });
@@ -114,15 +118,24 @@ app.post('/api/songs', async (req, res) => {
         const songData = {
             title: title.trim(),
             artist: artist ? artist.trim() : '',
+            album: album ? album.trim() : '',
+            lyrics_content: lyrics_content || '',
             lyrics_path: lyrics_path || '',
             mp3_path: mp3_path || '',
+            file_path: file_path || '',
+            file_name: file_name || '',
             tablature_url: tablature_url || '',
+            guitar_tab_url: guitar_tab_url || '',
+            bass_tab_url: bass_tab_url || '',
+            lyrics_url: lyrics_url || '',
             youtube_url: youtube_url || ''
         };
 
-        const newSong = db.addSong(songData);
+        console.log('Creating new song with data:', songData);
+        const newSong = db.addSongWithMetadata(songData);
         
         if (newSong) {
+            console.log('New song created:', newSong.id);
             res.status(201).json(newSong);
         } else {
             res.status(500).json({ error: 'Failed to add song' });
@@ -149,13 +162,26 @@ app.get('/api/songs/:id', async (req, res) => {
 
 app.put('/api/songs/:id', async (req, res) => {
     try {
+        const songId = req.params.id;
+        console.log('PUT /api/songs/:id - Song ID:', songId);
+        console.log('Request body:', req.body);
+        
         const { 
-            title, artist, album, lyrics_content, tablature_content,
+            title, artist, album, lyrics_content,
             tablature_url, guitar_tab_url, bass_tab_url, lyrics_url, youtube_url 
         } = req.body;
         
         if (!title || title.trim() === '') {
             return res.status(400).json({ error: 'Song title is required' });
+        }
+
+        // Check if song exists first
+        const existingSong = db.getSong(songId);
+        console.log('Existing song:', existingSong ? 'found' : 'not found');
+
+        if (!existingSong) {
+            console.log('Song not found for ID:', songId);
+            return res.status(404).json({ error: 'Song not found' });
         }
 
         // Use updateSongMetadata for comprehensive updates
@@ -164,7 +190,6 @@ app.put('/api/songs/:id', async (req, res) => {
             artist: artist ? artist.trim() : '',
             album: album ? album.trim() : '',
             lyrics_content: lyrics_content || '',
-            tablature_content: tablature_content || '',
             tablature_url: tablature_url || '',
             guitar_tab_url: guitar_tab_url || '',
             bass_tab_url: bass_tab_url || '',
@@ -173,12 +198,14 @@ app.put('/api/songs/:id', async (req, res) => {
             user_edited: true  // Mark as user-edited when updated via UI
         };
 
-        const updatedSong = db.updateSongMetadata(req.params.id, metadata);
+        console.log('Metadata to update:', metadata);
+        const updatedSong = db.updateSongMetadata(songId, metadata);
+        console.log('Update result:', updatedSong ? 'success' : 'failed');
         
         if (updatedSong) {
             res.json(updatedSong);
         } else {
-            res.status(404).json({ error: 'Song not found' });
+            res.status(500).json({ error: 'Failed to update song' });
         }
     } catch (error) {
         console.error('Error updating song:', error);
@@ -627,14 +654,14 @@ app.put('/api/config/paths', (req, res) => {
         config.scan_directories.excluded_paths = excluded_paths;
         
         // Note: Since the config is read-only, we can't save it directly
-        // The user would need to manually update the tablary-config.json file
+        // The user would need to manually update the jamber3-config.json file
         // For now, we'll return success but note that changes are temporary
         
         
         res.json({ 
             success: true, 
             message: 'Path configuration updated successfully',
-            note: 'Changes are temporary and will not persist after restart. To make changes permanent, update tablary-config.json manually.'
+            note: 'Changes are temporary and will not persist after restart. To make changes permanent, update jamber3-config.json manually.'
         });
     } catch (error) {
         console.error('Error updating path configuration:', error);

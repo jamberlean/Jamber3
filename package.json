@@ -1,5 +1,5 @@
 {
-  "name": "tablary",
+  "name": "jamber3",
   "version": "1.0.0",
   "description": "Automated guitar song library with tablature discovery",
   "main": "electron-main.js",

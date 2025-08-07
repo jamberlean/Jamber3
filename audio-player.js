@@ -23,6 +23,7 @@ class EmbeddedAudioPlayer {
         this.gainNode = null;
         this.audioBuffer = null;
         this.usePitchShift = false;
+        this._soundTouchLoading = false; // Prevent concurrent SoundTouch operations
         
         // DOM elements with song-specific IDs
         this.playBtn = document.getElementById(`playBtn-${songId}`);
@@ -49,9 +50,21 @@ class EmbeddedAudioPlayer {
         
         this.progressInterval = null;
         
-        this.initializePlayer();
-        this.attachEventListeners();
-        this.initializeWaveform();
+        // Initialize with error handling to prevent crashes
+        try {
+            this.initializePlayer();
+            this.attachEventListeners();
+            this.initializeWaveform();
+        } catch (error) {
+            console.error('Error initializing EmbeddedAudioPlayer:', error);
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'constructor', error, {
+                    songId: this.songId,
+                    filePath: this.filePath
+                });
+            }
+            this.showError('Failed to initialize audio player');
+        }
     }
 
     /**
@@ -85,6 +98,7 @@ class EmbeddedAudioPlayer {
                 onload: () => {
                     this.updateControls();
                     this.updateTimeDisplay();
+                    this.updateControlStates(); // Update control states based on initial pitch
                     this.initializeSoundTouch();
                 },
                 onloadstart: () => {
@@ -132,24 +146,80 @@ class EmbeddedAudioPlayer {
      */
     async initializeSoundTouch() {
         try {
-            // Create audio context if it doesn't exist
-            if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                this.gainNode = this.audioContext.createGain();
-                this.gainNode.connect(this.audioContext.destination);
+            // Skip SoundTouch initialization if SoundTouchJS isn't available
+            if (!window.SoundTouchJS || !window.SoundTouchJS.PitchShifter) {
+                console.warn('SoundTouchJS not available, pitch shifting disabled');
+                this.usePitchShift = false;
+                return;
             }
 
-            // Load audio buffer for SoundTouch processing
+            // Create audio context if it doesn't exist
+            if (!this.audioContext) {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.gainNode = this.audioContext.createGain();
+                    this.gainNode.connect(this.audioContext.destination);
+                } catch (contextError) {
+                    console.error('Failed to create audio context:', contextError);
+                    this.usePitchShift = false;
+                    return;
+                }
+            }
+
+            // Load audio buffer for SoundTouch processing (only when needed)
+            // Don't preload unless pitch shifting is actually requested
+            this.audioBuffer = null; // Will be loaded when needed
+            
+            console.log('SoundTouch ready for pitch shifting (buffer will load on demand)');
+        } catch (error) {
+            console.error('Error initializing SoundTouch:', error);
+            // Log the error but don't let it crash the app
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'soundTouchInit', error, {
+                    songId: this.songId,
+                    userAgent: navigator.userAgent
+                });
+            }
+            // Fallback to Howler-only mode
+            this.usePitchShift = false;
+        }
+    }
+
+    /**
+     * Load audio buffer for SoundTouch (on-demand loading)
+     */
+    async loadAudioBuffer() {
+        if (this.audioBuffer || !this.audioContext) {
+            return this.audioBuffer;
+        }
+
+        try {
             const audioSrc = `http://localhost:8081/audio/${this.songId}`;
-            const response = await fetch(audioSrc);
+            const response = await fetch(audioSrc, {
+                method: 'GET',
+                timeout: 10000 // 10 second timeout
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
             const arrayBuffer = await response.arrayBuffer();
             this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
             
-            console.log('SoundTouch initialized for pitch shifting');
+            console.log('Audio buffer loaded for SoundTouch');
+            return this.audioBuffer;
         } catch (error) {
-            console.error('Error initializing SoundTouch:', error);
-            // Fallback to Howler-only mode
-            this.usePitchShift = false;
+            console.error('Error loading audio buffer for SoundTouch:', error);
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'audioBufferLoad', error, {
+                    songId: this.songId,
+                    audioSrc: `http://localhost:8081/audio/${this.songId}`
+                });
+            }
+            // Don't crash, just disable pitch shifting for this song
+            this.audioBuffer = null;
+            throw error;
         }
     }
 
@@ -278,8 +348,8 @@ class EmbeddedAudioPlayer {
      * Play the current song
      */
     play() {
-        // Use SoundTouch if pitch shifting is active, otherwise use Howler
-        if (this.pitch !== 0 && this.audioBuffer) {
+        // Use SoundTouch if pitch shifting is active and SoundTouch is available
+        if (this.pitch !== 0 && this.audioContext && window.SoundTouchJS) {
             this.playSoundTouch();
         } else {
             this.playHowler();
@@ -306,30 +376,62 @@ class EmbeddedAudioPlayer {
     /**
      * Play using SoundTouch (pitch-shifted playback)
      */
-    playSoundTouch() {
-        if (!this.audioBuffer) {
-            console.warn('No audio buffer for SoundTouch');
-            this.playHowler(); // Fallback to Howler
+    async playSoundTouch() {
+        // Prevent concurrent calls to playSoundTouch
+        if (this._soundTouchLoading) {
+            console.log('SoundTouch already loading, ignoring concurrent call');
             return;
         }
-
+        
+        this._soundTouchLoading = true;
+        
         try {
-            // Resume audio context if suspended
-            if (this.audioContext.state === 'suspended') {
-                this.audioContext.resume();
+            // Validate prerequisites
+            if (!this.audioContext || !window.SoundTouchJS) {
+                console.warn('SoundTouch prerequisites not available');
+                this.playHowler();
+                return;
+            }
+            
+            // Load audio buffer on demand
+            await this.loadAudioBuffer();
+            
+            if (!this.audioBuffer) {
+                console.warn('Could not load audio buffer for SoundTouch');
+                this.playHowler(); // Fallback to Howler
+                return;
             }
 
-            // Stop current Howler playback
+            // Resume audio context if suspended
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+            }
+
+            // Stop current Howler playback if it's playing
             if (this.howl && this.howl.playing()) {
                 this.howl.stop();
+            }
+
+            // Disconnect any existing SoundTouch instance to prevent conflicts
+            if (this.soundTouch) {
+                try {
+                    this.soundTouch.disconnect();
+                } catch (e) {
+                    console.warn('Error disconnecting existing SoundTouch:', e);
+                }
+                this.soundTouch = null;
             }
 
             // Create and configure PitchShifter
             const shifter = this.createPitchShifter();
             if (!shifter) {
+                console.warn('Failed to create PitchShifter');
                 this.playHowler(); // Fallback to Howler
                 return;
             }
+
+            // Store reference to the shifter
+            this.soundTouch = shifter;
 
             // Connect to audio output and start playback
             shifter.connect(this.gainNode);
@@ -338,10 +440,35 @@ class EmbeddedAudioPlayer {
             this.isPlaying = true;
             this.updateControls();
             this.startProgressUpdates();
+            
+            console.log('SoundTouch playback started successfully');
 
         } catch (error) {
             console.error('Error playing with SoundTouch:', error);
-            this.playHowler(); // Fallback to Howler
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'playSoundTouch', error, {
+                    songId: this.songId,
+                    pitch: this.pitch,
+                    hasAudioContext: !!this.audioContext,
+                    hasAudioBuffer: !!this.audioBuffer,
+                    hasSoundTouchJS: !!window.SoundTouchJS
+                });
+            }
+            
+            // Clean up any partial state
+            if (this.soundTouch) {
+                try {
+                    this.soundTouch.disconnect();
+                } catch (e) {
+                    // Ignore cleanup errors
+                }
+                this.soundTouch = null;
+            }
+            
+            // Always fallback to Howler
+            this.playHowler();
+        } finally {
+            this._soundTouchLoading = false;
         }
     }
 
@@ -352,7 +479,12 @@ class EmbeddedAudioPlayer {
         try {
             // Stop SoundTouch if active
             if (this.soundTouch) {
-                this.soundTouch.disconnect();
+                try {
+                    this.soundTouch.disconnect();
+                } catch (e) {
+                    console.warn('Error disconnecting SoundTouch during pause:', e);
+                }
+                // Don't clear the reference, we may want to resume
             }
             
             // Pause Howler
@@ -366,6 +498,12 @@ class EmbeddedAudioPlayer {
             this.stopProgressUpdates();
         } catch (error) {
             console.error('Error pausing audio:', error);
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'pause', error, {
+                    songId: this.songId,
+                    pitch: this.pitch
+                });
+            }
         }
     }
 
@@ -376,7 +514,12 @@ class EmbeddedAudioPlayer {
         try {
             // Stop SoundTouch if active
             if (this.soundTouch) {
-                this.soundTouch.disconnect();
+                try {
+                    this.soundTouch.disconnect();
+                } catch (e) {
+                    console.warn('Error disconnecting SoundTouch during stop:', e);
+                }
+                this.soundTouch = null; // Clear reference on stop
             }
             
             // Stop Howler
@@ -386,11 +529,18 @@ class EmbeddedAudioPlayer {
 
             // Update state
             this.isPlaying = false;
+            this._soundTouchLoading = false; // Reset loading flag
             this.updateControls();
             this.stopProgressUpdates();
             this.updateProgress(0);
         } catch (error) {
             console.error('Error stopping audio:', error);
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'stop', error, {
+                    songId: this.songId,
+                    pitch: this.pitch
+                });
+            }
         }
     }
 
@@ -449,12 +599,27 @@ class EmbeddedAudioPlayer {
     }
 
     /**
-     * Set pitch shift
+     * Set pitch shift with user confirmation
      * @param {number} semitones - Pitch shift in semitones (-12 to +12)
      */
     setPitch(semitones) {
         const oldPitch = this.pitch;
-        this.pitch = Math.max(-12, Math.min(12, semitones));
+        const newPitch = Math.max(-12, Math.min(12, semitones));
+        
+        // If moving from 0 to non-zero pitch, show confirmation dialog
+        if (oldPitch === 0 && newPitch !== 0) {
+            const confirmed = this.confirmPitchShifting();
+            if (!confirmed) {
+                // User cancelled - revert pitch slider to 0
+                if (this.pitchSlider) {
+                    this.pitchSlider.value = 0;
+                }
+                this.updatePitchDisplay();
+                return;
+            }
+        }
+        
+        this.pitch = newPitch;
         
         // Update pitch slider
         if (this.pitchSlider) {
@@ -463,6 +628,9 @@ class EmbeddedAudioPlayer {
 
         // Update pitch display
         this.updatePitchDisplay();
+        
+        // Update control states based on pitch mode
+        this.updateControlStates();
 
         // If pitch changed and we're playing, restart with new pitch
         if (this.isPlaying && oldPitch !== this.pitch) {
@@ -477,6 +645,73 @@ class EmbeddedAudioPlayer {
         if (this.soundTouch) {
             this.soundTouch.pitch = Math.pow(2, this.pitch / 12); // Convert semitones to pitch ratio
         }
+    }
+    
+    /**
+     * Show confirmation dialog for pitch shifting
+     * @returns {boolean} - True if user confirmed, false if cancelled
+     */
+    confirmPitchShifting() {
+        const message = `Pitch shifting will disable some audio controls while active:
+
+• Time slider (seeking/skipping) will be disabled
+• A-B loop controls will be disabled  
+• Speed control will still work
+• Volume control will still work
+
+Do you want to enable pitch shifting?`;
+
+        return confirm(message);
+    }
+    
+    /**
+     * Update control states based on whether pitch shifting is active
+     */
+    updateControlStates() {
+        const isPitchActive = this.pitch !== 0;
+        
+        // Disable/enable progress container (time slider)
+        if (this.progressContainer) {
+            this.progressContainer.style.pointerEvents = isPitchActive ? 'none' : 'auto';
+            this.progressContainer.style.opacity = isPitchActive ? '0.5' : '1';
+            this.progressContainer.title = isPitchActive ? 'Time slider disabled during pitch shifting' : '';
+        }
+        
+        // Disable/enable skip buttons
+        if (this.skipBackBtn) {
+            this.skipBackBtn.disabled = isPitchActive;
+            this.skipBackBtn.title = isPitchActive ? 'Skipping disabled during pitch shifting' : '';
+        }
+        if (this.skipForwardBtn) {
+            this.skipForwardBtn.disabled = isPitchActive;
+            this.skipForwardBtn.title = isPitchActive ? 'Skipping disabled during pitch shifting' : '';
+        }
+        
+        // Disable/enable loop controls
+        if (this.setABtn) {
+            this.setABtn.disabled = isPitchActive;
+            this.setABtn.title = isPitchActive ? 'Loop controls disabled during pitch shifting' : '';
+        }
+        if (this.setBBtn) {
+            this.setBBtn.disabled = isPitchActive;
+            this.setBBtn.title = isPitchActive ? 'Loop controls disabled during pitch shifting' : '';
+        }
+        if (this.loopToggleBtn) {
+            this.loopToggleBtn.disabled = isPitchActive;
+            this.loopToggleBtn.title = isPitchActive ? 'Loop controls disabled during pitch shifting' : '';
+        }
+        if (this.loopClearBtn) {
+            this.loopClearBtn.disabled = isPitchActive;
+            this.loopClearBtn.title = isPitchActive ? 'Loop controls disabled during pitch shifting' : '';
+        }
+        
+        // Clear any active loops when entering pitch mode
+        if (isPitchActive && (this.loopPointA !== null || this.loopPointB !== null || this.isLooping)) {
+            this.clearLoopPoints();
+        }
+        
+        // Speed control remains enabled - it works with both Howler and SoundTouch
+        // Volume control remains enabled - it works with both systems
     }
 
     /**
@@ -603,12 +838,28 @@ class EmbeddedAudioPlayer {
         if (!this.howl) return;
 
         try {
+            // Since we now disable seeking controls when pitch shifting is active,
+            // seeking should only happen with normal Howler playback
+            if (this.pitch !== 0) {
+                console.warn('Seeking attempted while pitch shifting is active - this should be prevented by UI');
+                return;
+            }
+            
+            // Normal Howler seeking
             this.howl.seek(position);
             this.updateProgress(position);
         } catch (error) {
             console.error('Error seeking audio:', error);
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'seek', error, {
+                    songId: this.songId,
+                    position: position,
+                    pitch: this.pitch
+                });
+            }
         }
     }
+
 
     /**
      * Handle progress bar click
@@ -698,11 +949,22 @@ class EmbeddedAudioPlayer {
     skipForward(seconds) {
         if (!this.howl) return;
         
-        const currentTime = this.howl.seek();
-        const duration = this.howl.duration();
-        const newTime = Math.min(currentTime + seconds, duration);
-        
-        this.seek(newTime);
+        try {
+            const currentTime = this.howl.seek();
+            const duration = this.howl.duration();
+            const newTime = Math.min(currentTime + seconds, duration);
+            
+            this.seek(newTime);
+        } catch (error) {
+            console.error('Error in skipForward:', error);
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'skipForward', error, {
+                    songId: this.songId,
+                    seconds: seconds,
+                    pitch: this.pitch
+                });
+            }
+        }
     }
 
     /**
@@ -712,10 +974,21 @@ class EmbeddedAudioPlayer {
     skipBackward(seconds) {
         if (!this.howl) return;
         
-        const currentTime = this.howl.seek();
-        const newTime = Math.max(currentTime - seconds, 0);
-        
-        this.seek(newTime);
+        try {
+            const currentTime = this.howl.seek();
+            const newTime = Math.max(currentTime - seconds, 0);
+            
+            this.seek(newTime);
+        } catch (error) {
+            console.error('Error in skipBackward:', error);
+            if (window.ErrorLogger) {
+                window.ErrorLogger.logError('AudioPlayer', 'skipBackward', error, {
+                    songId: this.songId,
+                    seconds: seconds,
+                    pitch: this.pitch
+                });
+            }
+        }
     }
 
     /**

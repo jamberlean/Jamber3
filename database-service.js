@@ -58,12 +58,12 @@ class DatabaseService {
                 const insertSong = this.db.prepare(`
                     INSERT INTO songs (
                         id, title, is_cover, artist, lyrics_path, lyrics_content, mp3_path,
-                        tablature_url, tablature_content, youtube_url, created_at, file_path,
+                        tablature_url, youtube_url, created_at, file_path,
                         file_name, extracted_title, extracted_artist, metadata_source,
                         file_size, duration, format, bitrate, sample_rate, last_scanned,
                         user_edited, guitar_tab_url, guitar_tab_verified, bass_tab_url,
                         bass_tab_verified, lyrics_url, lyrics_verified, album
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `);
 
                 const insertMany = this.db.transaction((songs) => {
@@ -71,7 +71,7 @@ class DatabaseService {
                         insertSong.run(
                             song.id, song.title, song.is_cover ? 1 : 0, song.artist,
                             song.lyrics_path, song.lyrics_content, song.mp3_path,
-                            song.tablature_url, song.tablature_content, song.youtube_url,
+                            song.tablature_url, song.youtube_url,
                             song.created_at, song.file_path, song.file_name,
                             song.extracted_title, song.extracted_artist, song.metadata_source,
                             song.file_size, song.duration, song.format, song.bitrate,
@@ -158,7 +158,6 @@ class DatabaseService {
                 lyrics_content: songData.lyrics_content || '',
                 mp3_path: songData.mp3_path || '',
                 tablature_url: songData.tablature_url || '',
-                tablature_content: songData.tablature_content || '',
                 youtube_url: songData.youtube_url || '',
                 created_at: new Date().toISOString()
             };
@@ -166,14 +165,14 @@ class DatabaseService {
             const stmt = this.db.prepare(`
                 INSERT INTO songs (
                     id, title, is_cover, artist, lyrics_path, lyrics_content, mp3_path,
-                    tablature_url, tablature_content, youtube_url, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    tablature_url, youtube_url, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
 
             stmt.run(
                 newSong.id, newSong.title, newSong.is_cover ? 1 : 0, newSong.artist,
                 newSong.lyrics_path, newSong.lyrics_content, newSong.mp3_path,
-                newSong.tablature_url, newSong.tablature_content, newSong.youtube_url,
+                newSong.tablature_url, newSong.youtube_url,
                 newSong.created_at
             );
 
@@ -236,14 +235,14 @@ class DatabaseService {
             const stmt = this.db.prepare(`
                 UPDATE songs SET
                     title = ?, is_cover = ?, artist = ?, lyrics_path = ?, lyrics_content = ?,
-                    mp3_path = ?, tablature_url = ?, tablature_content = ?, youtube_url = ?
+                    mp3_path = ?, tablature_url = ?, youtube_url = ?
                 WHERE id = ?
             `);
 
             const result = stmt.run(
                 songData.title, songData.is_cover ? 1 : 0, songData.artist,
                 songData.lyrics_path, songData.lyrics_content, songData.mp3_path,
-                songData.tablature_url, songData.tablature_content, songData.youtube_url,
+                songData.tablature_url, songData.youtube_url,
                 parseInt(id)
             );
 
@@ -365,18 +364,18 @@ class DatabaseService {
             const stmt = this.db.prepare(`
                 INSERT INTO songs (
                     id, title, is_cover, artist, lyrics_path, lyrics_content, mp3_path,
-                    tablature_url, tablature_content, youtube_url, created_at, file_path,
+                    tablature_url, youtube_url, created_at, file_path,
                     file_name, extracted_title, extracted_artist, metadata_source,
                     file_size, duration, format, bitrate, sample_rate, last_scanned,
                     user_edited, guitar_tab_url, guitar_tab_verified, bass_tab_url,
                     bass_tab_verified, lyrics_url, lyrics_verified, album
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
 
             stmt.run(
                 newSong.id, newSong.title, newSong.is_cover ? 1 : 0, newSong.artist,
                 newSong.lyrics_path, newSong.lyrics_content, newSong.mp3_path,
-                newSong.tablature_url, newSong.tablature_content, newSong.youtube_url,
+                newSong.tablature_url, newSong.youtube_url,
                 newSong.created_at, newSong.file_path, newSong.file_name,
                 newSong.extracted_title, newSong.extracted_artist, newSong.metadata_source,
                 newSong.file_size, newSong.duration, newSong.format, newSong.bitrate,
@@ -402,12 +401,12 @@ class DatabaseService {
             const stmt = this.db.prepare(`
                 INSERT INTO songs (
                     id, title, is_cover, artist, lyrics_path, lyrics_content, mp3_path,
-                    tablature_url, tablature_content, youtube_url, created_at, file_path,
+                    tablature_url, youtube_url, created_at, file_path,
                     file_name, extracted_title, extracted_artist, metadata_source,
                     file_size, duration, format, bitrate, sample_rate, last_scanned,
                     user_edited, guitar_tab_url, guitar_tab_verified, bass_tab_url,
                     bass_tab_verified, lyrics_url, lyrics_verified, album
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
 
             const insertMany = this.db.transaction((songs) => {
@@ -421,7 +420,7 @@ class DatabaseService {
                     stmt.run(
                         newSong.id, newSong.title, newSong.is_cover ? 1 : 0, newSong.artist,
                         newSong.lyrics_path, newSong.lyrics_content, newSong.mp3_path,
-                        newSong.tablature_url, newSong.tablature_content, newSong.youtube_url,
+                        newSong.tablature_url, newSong.youtube_url,
                         newSong.created_at, newSong.file_path, newSong.file_name,
                         newSong.extracted_title, newSong.extracted_artist, newSong.metadata_source,
                         newSong.file_size, newSong.duration, newSong.format, newSong.bitrate,
@@ -472,7 +471,21 @@ class DatabaseService {
     updateSongMetadata(id, metadata) {
         try {
             const fields = Object.keys(metadata);
-            const values = Object.values(metadata);
+            const values = Object.values(metadata).map(value => {
+                // Convert boolean to integer for SQLite compatibility
+                if (typeof value === 'boolean') {
+                    return value ? 1 : 0;
+                }
+                // Convert undefined to null
+                if (value === undefined) {
+                    return null;
+                }
+                // Convert other types to string if not already a valid SQLite type
+                if (typeof value !== 'string' && typeof value !== 'number' && value !== null) {
+                    return String(value);
+                }
+                return value;
+            });
             const setClause = fields.map(field => `${field} = ?`).join(', ');
 
             const stmt = this.db.prepare(`UPDATE songs SET ${setClause} WHERE id = ?`);

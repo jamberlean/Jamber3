@@ -1,15 +1,19 @@
 /**
  * Resource Review Component for Jamber3
- * Handles user review and acceptance of found resources
+ * Three separate dialogs for Guitar Tabs, Bass Tabs, and Lyrics
  */
 class ResourceReview {
     constructor() {
         this.currentSong = null;
-        this.currentResults = null;
-        this.currentResourceType = null;
-        this.reviewModal = null;
+        this.currentResults = {};
         
-        this.createReviewModal();
+        // Create three separate dialog instances
+        this.guitarTabModal = null;
+        this.bassTabModal = null;
+        this.lyricsModal = null;
+        this.lyricsPopup = null;
+        
+        this.createDialogs();
         this.initializeEventListeners();
     }
 
@@ -17,186 +21,265 @@ class ResourceReview {
      * Initialize event listeners
      */
     initializeEventListeners() {
-        // Listen for resource finding events
-        document.addEventListener('findResource', (e) => {
-            this.handleFindResource(e.detail.song, e.detail.resourceType);
+        // Listen for individual resource finding events
+        document.addEventListener('findGuitarTabs', (e) => {
+            this.handleFindResource('guitar_tabs', e.detail.song);
         });
 
-        document.addEventListener('findAllResources', (e) => {
-            this.handleFindAllResources(e.detail.song);
+        document.addEventListener('findBassTabs', (e) => {
+            this.handleFindResource('bass_tabs', e.detail.song);
+        });
+
+        document.addEventListener('findLyrics', (e) => {
+            this.handleFindResource('lyrics', e.detail.song);
+        });
+
+        // Listen for lyrics display event
+        document.addEventListener('showLyrics', (e) => {
+            this.showLyricsPopup(e.detail.song);
         });
     }
 
     /**
-     * Create the review modal
+     * Create all three resource dialogs
      */
-    createReviewModal() {
+    createDialogs() {
+        this.guitarTabModal = this.createResourceModal('guitarTab', 'Guitar Tabs', 'guitar_tabs');
+        this.bassTabModal = this.createResourceModal('bassTab', 'Bass Tabs', 'bass_tabs');
+        this.lyricsModal = this.createResourceModal('lyrics', 'Lyrics', 'lyrics');
+        this.lyricsPopup = this.createLyricsPopup();
+    }
+
+    /**
+     * Create a resource modal for a specific type
+     */
+    createResourceModal(modalId, title, resourceType) {
         const modal = document.createElement('div');
         modal.className = 'modal resource-review-modal';
-        modal.id = 'resourceReviewModal';
+        modal.id = `${modalId}ReviewModal`;
         
         modal.innerHTML = `
             <div class="modal-content resource-review-content">
                 <div class="modal-header">
-                    <h2 id="reviewModalTitle">Review Found Resources</h2>
-                    <span class="close" id="reviewModalClose">&times;</span>
+                    <h2>${title} for <span class="song-title"></span></h2>
+                    <span class="close" data-modal="${modalId}">&times;</span>
                 </div>
                 <div class="review-body">
-                    <div class="song-info">
-                        <h3 id="reviewSongTitle"></h3>
-                        <p id="reviewSongArtist"></p>
-                    </div>
-                    <div class="resource-type-selector">
-                        <button class="resource-type-btn active" data-type="guitar_tabs">Guitar Tabs</button>
-                        <button class="resource-type-btn" data-type="bass_tabs">Bass Tabs</button>
-                        <button class="resource-type-btn" data-type="lyrics">Lyrics</button>
-                    </div>
-                    <div class="search-progress" id="searchProgress" style="display: none;">
+                    <div class="search-progress" style="display: none;">
                         <div class="progress-bar-container">
-                            <div class="progress-bar" id="searchProgressBar"></div>
+                            <div class="progress-bar"></div>
                         </div>
-                        <p id="searchProgressText">Searching...</p>
+                        <p class="progress-text">Searching...</p>
                     </div>
-                    <div class="results-container" id="resultsContainer">
+                    <div class="results-container">
                         <div class="empty-state">
-                            <p>Click "Search" to find resources for this song</p>
+                            <p>Searching for ${title.toLowerCase()}...</p>
                         </div>
                     </div>
-                </div>
-                <div class="review-actions">
-                    <button class="btn-secondary" id="searchBtn">Search</button>
-                    <button class="btn-secondary" id="manualEntryBtn">Enter Manually</button>
-                    <button class="btn-secondary" id="reviewCancelBtn">Cancel</button>
+                    <div class="manual-entry">
+                        <input type="text" class="manual-url-input" placeholder="Found a favorite source? Paste it here!" />
+                        <button class="save-manual-btn">Save</button>
+                    </div>
                 </div>
             </div>
         `;
 
         document.body.appendChild(modal);
-        this.reviewModal = modal;
-
-        // Attach event listeners to modal elements
-        this.attachModalEventListeners();
+        this.attachModalEventListeners(modal, modalId, resourceType);
+        return modal;
     }
 
     /**
-     * Attach event listeners to modal elements
+     * Create lyrics display popup
      */
-    attachModalEventListeners() {
-        const modal = this.reviewModal;
+    createLyricsPopup() {
+        const popup = document.createElement('div');
+        popup.className = 'modal lyrics-popup-modal';
+        popup.id = 'lyricsPopup';
+        
+        popup.innerHTML = `
+            <div class="modal-content lyrics-popup-content">
+                <div class="modal-header">
+                    <h2>Lyrics - <span class="song-title"></span></h2>
+                    <span class="close" data-modal="lyrics-popup">&times;</span>
+                </div>
+                <div class="lyrics-body">
+                    <div class="lyrics-content"></div>
+                </div>
+            </div>
+        `;
 
-        // Close modal
-        modal.querySelector('#reviewModalClose').addEventListener('click', () => {
-            this.closeReviewModal();
-        });
+        document.body.appendChild(popup);
+        this.attachLyricsPopupListeners(popup);
+        return popup;
+    }
 
-        modal.querySelector('#reviewCancelBtn').addEventListener('click', () => {
-            this.closeReviewModal();
-        });
-
-        // Resource type selector
-        const typeButtons = modal.querySelectorAll('.resource-type-btn');
-        typeButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.switchResourceType(btn.dataset.type);
-            });
-        });
-
-        // Search button
-        modal.querySelector('#searchBtn').addEventListener('click', () => {
-            this.searchCurrentResourceType();
-        });
-
-        // Manual entry button
-        modal.querySelector('#manualEntryBtn').addEventListener('click', () => {
-            this.showManualEntry();
+    /**
+     * Attach event listeners to a resource modal
+     */
+    attachModalEventListeners(modal, modalId, resourceType) {
+        // Close button
+        const closeBtn = modal.querySelector('.close');
+        closeBtn.addEventListener('click', () => {
+            this.closeModal(modal);
         });
 
         // Click outside to close
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
-                this.closeReviewModal();
+                this.closeModal(modal);
+            }
+        });
+
+        // Manual entry save button
+        const saveBtn = modal.querySelector('.save-manual-btn');
+        const urlInput = modal.querySelector('.manual-url-input');
+        
+        saveBtn.addEventListener('click', () => {
+            const url = urlInput.value.trim();
+            if (url) {
+                this.saveManualResource(resourceType, url);
+                this.closeModal(modal);
+            }
+        });
+
+        // Enter key in input field
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                saveBtn.click();
+            }
+        });
+
+    }
+
+    /**
+     * Attach event listeners to lyrics popup
+     */
+    attachLyricsPopupListeners(popup) {
+        // Close button
+        const closeBtn = popup.querySelector('.close');
+        closeBtn.addEventListener('click', () => {
+            popup.style.display = 'none';
+        });
+
+        // Click outside to close
+        popup.addEventListener('click', (e) => {
+            if (e.target === popup) {
+                popup.style.display = 'none';
             }
         });
     }
 
     /**
-     * Handle single resource finding
-     * @param {Object} song - Song object
-     * @param {string} resourceType - Type of resource to find
+     * Handle resource finding for a specific type
      */
-    async handleFindResource(song, resourceType) {
+    async handleFindResource(resourceType, song) {
         this.currentSong = song;
-        this.currentResourceType = resourceType;
-        this.currentResults = null;
-
-        this.openReviewModal();
-        this.switchResourceType(resourceType);
-        await this.searchCurrentResourceType();
-    }
-
-    /**
-     * Handle finding all resources
-     * @param {Object} song - Song object
-     */
-    async handleFindAllResources(song) {
-        this.currentSong = song;
-        this.currentResourceType = 'guitar_tabs';
-        this.currentResults = null;
-
-        this.openReviewModal();
         
-        // Show progress and search all resource types
-        await this.searchAllResourceTypes();
+        const modal = this.getModalForResourceType(resourceType);
+        this.openModal(modal, song);
+        await this.searchResourceType(resourceType);
     }
 
     /**
-     * Open the review modal
+     * Show lyrics popup with text content
      */
-    openReviewModal() {
+    showLyricsPopup(song) {
+        if (!song.lyrics_content) {
+            return;
+        }
+
+        const popup = this.lyricsPopup;
+        const songTitle = popup.querySelector('.song-title');
+        const lyricsContent = popup.querySelector('.lyrics-content');
+
+        // Set song title
+        const artist = song.artist || song.extracted_artist || '';
+        songTitle.textContent = artist ? `${song.title} - ${artist}` : song.title;
+
+        // Set lyrics content with preserved line breaks
+        lyricsContent.textContent = song.lyrics_content;
+        lyricsContent.style.whiteSpace = 'pre-wrap';
+
+        // Show popup
+        popup.style.display = 'block';
+
+        // Dynamic sizing
+        this.resizeLyricsPopup(popup);
+    }
+
+    /**
+     * Resize lyrics popup to fit content
+     */
+    resizeLyricsPopup(popup) {
+        const content = popup.querySelector('.modal-content');
+        const lyricsBody = popup.querySelector('.lyrics-body');
+        
+        // Reset size
+        content.style.width = 'auto';
+        content.style.height = 'auto';
+        
+        // Get content dimensions
+        const textHeight = lyricsBody.scrollHeight + 100; // Add padding for header
+        const textWidth = Math.max(600, Math.min(1200, lyricsBody.scrollWidth + 100));
+        
+        // Set size with limits
+        const maxHeight = window.innerHeight * 0.8;
+        const maxWidth = window.innerWidth * 0.8;
+        
+        content.style.width = Math.min(textWidth, maxWidth) + 'px';
+        content.style.height = Math.min(textHeight, maxHeight) + 'px';
+        
+        // Enable scrolling if needed
+        lyricsBody.style.overflow = textHeight > maxHeight ? 'auto' : 'visible';
+    }
+
+    /**
+     * Get modal for resource type
+     */
+    getModalForResourceType(resourceType) {
+        switch (resourceType) {
+            case 'guitar_tabs': return this.guitarTabModal;
+            case 'bass_tabs': return this.bassTabModal;
+            case 'lyrics': return this.lyricsModal;
+            default: return this.guitarTabModal;
+        }
+    }
+
+    /**
+     * Open a modal
+     */
+    openModal(modal, song) {
+        const songTitle = modal.querySelector('.song-title');
+        const artist = song.artist || song.extracted_artist || '';
+        songTitle.textContent = artist ? `${song.title} - ${artist}` : song.title;
+        
+        // Clear previous results
+        const resultsContainer = modal.querySelector('.results-container');
+        resultsContainer.innerHTML = '<div class="empty-state"><p>Searching...</p></div>';
+        
+        // Clear manual input
+        const urlInput = modal.querySelector('.manual-url-input');
+        urlInput.value = '';
+        
+        modal.style.display = 'block';
+    }
+
+    /**
+     * Close a modal
+     */
+    closeModal(modal) {
+        modal.style.display = 'none';
+    }
+
+    /**
+     * Search for resources of a specific type
+     */
+    async searchResourceType(resourceType) {
         if (!this.currentSong) return;
 
-        // Update song info
-        document.getElementById('reviewSongTitle').textContent = this.currentSong.title || 'Unknown Title';
-        document.getElementById('reviewSongArtist').textContent = 
-            (this.currentSong.artist || this.currentSong.extracted_artist || 'Unknown Artist');
-
-        this.reviewModal.style.display = 'block';
-    }
-
-    /**
-     * Close the review modal
-     */
-    closeReviewModal() {
-        this.reviewModal.style.display = 'none';
-        this.currentSong = null;
-        this.currentResults = null;
-        this.currentResourceType = null;
-    }
-
-    /**
-     * Switch resource type
-     * @param {string} resourceType - Resource type to switch to
-     */
-    switchResourceType(resourceType) {
-        this.currentResourceType = resourceType;
-
-        // Update active button
-        const typeButtons = this.reviewModal.querySelectorAll('.resource-type-btn');
-        typeButtons.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.type === resourceType);
-        });
-
-        // Display results for this type if available
-        this.displayResults();
-    }
-
-    /**
-     * Search for current resource type
-     */
-    async searchCurrentResourceType() {
-        if (!this.currentSong || !this.currentResourceType) return;
-
-        this.showSearchProgress(true);
+        const modal = this.getModalForResourceType(resourceType);
+        this.showSearchProgress(modal, true);
         
         try {
             // Make API call to find resources
@@ -206,79 +289,34 @@ class ResourceReview {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    resourceType: this.currentResourceType
+                    resourceType: resourceType
                 })
             });
 
             if (response.ok) {
                 const results = await response.json();
-                
-                if (!this.currentResults) {
-                    this.currentResults = {};
-                }
-                this.currentResults[this.currentResourceType] = results;
-
-                this.displayResults();
+                this.currentResults[resourceType] = results;
+                this.displayResults(modal, resourceType, results);
             } else {
                 const error = await response.json();
-                this.showError('Failed to search for resources: ' + error.error);
+                this.showError(modal, 'Failed to search for resources: ' + error.error);
             }
         } catch (error) {
             console.error('Error searching for resources:', error);
-            this.showError('Failed to search for resources. Please try again.');
+            this.showError(modal, 'Failed to search for resources. Please try again.');
         } finally {
-            this.showSearchProgress(false);
+            this.showSearchProgress(modal, false);
         }
     }
 
     /**
-     * Search all resource types
+     * Display search results in modal
      */
-    async searchAllResourceTypes() {
-        if (!this.currentSong) return;
-
-        this.showSearchProgress(true);
+    displayResults(modal, resourceType, results) {
+        const container = modal.querySelector('.results-container');
         
-        try {
-            // Make API call to find all resources
-            const response = await fetch(`/api/songs/${this.currentSong.id}/find-resources`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({})
-            });
-
-            if (response.ok) {
-                this.currentResults = await response.json();
-                this.displayResults();
-            } else {
-                const error = await response.json();
-                this.showError('Failed to search for resources: ' + error.error);
-            }
-        } catch (error) {
-            console.error('Error searching for all resources:', error);
-            this.showError('Failed to search for resources. Please try again.');
-        } finally {
-            this.showSearchProgress(false);
-        }
-    }
-
-    /**
-     * Display search results
-     */
-    displayResults() {
-        const container = document.getElementById('resultsContainer');
-        
-        if (!this.currentResults || !this.currentResults[this.currentResourceType]) {
-            container.innerHTML = '<div class="empty-state"><p>No results found. Try a different search or enter manually.</p></div>';
-            return;
-        }
-
-        const results = this.currentResults[this.currentResourceType];
-        
-        if (results.length === 0) {
-            container.innerHTML = '<div class="empty-state"><p>No results found. Try entering the URL manually.</p></div>';
+        if (!results || results.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No results found. Try entering the URL manually below.</p></div>';
             return;
         }
 
@@ -287,16 +325,15 @@ class ResourceReview {
         results.forEach((result, index) => {
             const confidencePercentage = Math.round(result.confidence * 100);
             const confidenceClass = result.confidence > 0.7 ? 'high' : result.confidence > 0.4 ? 'medium' : 'low';
-            const isManualSearch = result.isManualSearch || false;
             
             html += `
-                <div class="result-item ${isManualSearch ? 'manual-search' : ''}" data-index="${index}">
+                <div class="result-item" data-index="${index}">
                     <div class="result-header">
                         <h4>${this.escapeHtml(result.title)}</h4>
                         ${result.artist ? `<p class="result-artist">${this.escapeHtml(result.artist)}</p>` : ''}
-                        ${!isManualSearch ? `<div class="result-confidence confidence-${confidenceClass}">
+                        <div class="result-confidence confidence-${confidenceClass}">
                             ${confidencePercentage}% match
-                        </div>` : ''}
+                        </div>
                     </div>
                     <div class="result-details">
                         <span class="result-source">${result.source}</span>
@@ -305,13 +342,10 @@ class ResourceReview {
                     </div>
                     <div class="result-url">
                         <input type="text" value="${result.url}" readonly>
-                        <button class="btn-copy" onclick="navigator.clipboard.writeText('${result.url}')">Copy</button>
+                        <span class="url-display">${result.url}</span>
                     </div>
                     <div class="result-actions">
-                        ${!isManualSearch ? `<button class="btn-primary accept-btn" data-index="${index}">Accept This</button>` : ''}
-                        <button class="btn-secondary preview-btn" data-url="${result.url}">
-                            ${isManualSearch ? 'View Website' : 'Preview'}
-                        </button>
+                        <button class="btn-secondary preview-btn" data-url="${result.url}">View Website</button>
                     </div>
                 </div>
             `;
@@ -321,23 +355,14 @@ class ResourceReview {
         container.innerHTML = html;
 
         // Attach result event listeners
-        this.attachResultEventListeners();
+        this.attachResultEventListeners(modal, resourceType);
     }
 
     /**
      * Attach event listeners to result items
      */
-    attachResultEventListeners() {
-        const container = document.getElementById('resultsContainer');
-
-        // Accept buttons
-        const acceptButtons = container.querySelectorAll('.accept-btn');
-        acceptButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const index = parseInt(btn.dataset.index);
-                this.acceptResource(index);
-            });
-        });
+    attachResultEventListeners(modal, resourceType) {
+        const container = modal.querySelector('.results-container');
 
         // Preview buttons
         const previewButtons = container.querySelectorAll('.preview-btn');
@@ -349,184 +374,155 @@ class ResourceReview {
         });
     }
 
+
     /**
-     * Accept a resource
-     * @param {number} index - Index of the result to accept
+     * Save manual resource URL
      */
-    async acceptResource(index) {
-        if (!this.currentResults || !this.currentResults[this.currentResourceType]) return;
+    async saveManualResource(resourceType, url) {
+        const fieldName = resourceType === 'guitar_tabs' ? 'guitar_tab_url' :
+                         resourceType === 'bass_tabs' ? 'bass_tab_url' : 'lyrics_url';
+        
+        await this.saveResourceUrl(fieldName, url);
+    }
 
-        const result = this.currentResults[this.currentResourceType][index];
-        if (!result) return;
-
+    /**
+     * Save resource URL to database
+     */
+    async saveResourceUrl(fieldName, url) {
         try {
-            // Update the song with the accepted resource
-            const updateData = {};
-            updateData[`${this.currentResourceType.slice(0, -1)}_url`] = result.url;
-            updateData[`${this.currentResourceType.slice(0, -1)}_verified`] = true;
+            if (!this.currentSong) {
+                throw new Error('No current song available');
+            }
 
-            // Make API call to update song
-            const response = await fetch(`/api/songs/${this.currentSong.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(updateData)
+            console.log('Saving resource URL:', {
+                songId: this.currentSong.id,
+                fieldName,
+                url,
+                currentSong: this.currentSong
             });
 
+            // First, try to fetch the complete song data from the server
+            const songResponse = await fetch(`/api/songs/${this.currentSong.id}`);
+            let fullSong = null;
+            let isNewSong = false;
+            
+            if (songResponse.ok) {
+                // Song exists, we'll update it
+                fullSong = await songResponse.json();
+                console.log('Song exists in database, will update:', fullSong);
+            } else {
+                // Song doesn't exist, we'll create it
+                isNewSong = true;
+                console.log('Song not found in database, will create new entry for ID:', this.currentSong.id);
+            }
+
+            // Build the song data
+            const songData = {
+                id: isNewSong ? undefined : this.currentSong.id, // Include ID for PUT, exclude for POST
+                title: fullSong?.title || this.currentSong.title || 'Unknown Title',
+                artist: fullSong?.artist || this.currentSong.artist || '',
+                album: fullSong?.album || this.currentSong.album || '',
+                lyrics_content: fullSong?.lyrics_content || '',
+                tablature_url: fullSong?.tablature_url || '',
+                guitar_tab_url: fullSong?.guitar_tab_url || '',
+                bass_tab_url: fullSong?.bass_tab_url || '',
+                lyrics_url: fullSong?.lyrics_url || '',
+                youtube_url: fullSong?.youtube_url || '',
+                // Add any other fields from currentSong that might be needed
+                file_path: fullSong?.file_path || this.currentSong.file_path || '',
+                file_name: fullSong?.file_name || this.currentSong.file_name || ''
+            };
+            
+            // Update the specific field
+            songData[fieldName] = url;
+            songData[fieldName.replace('_url', '_verified')] = true;
+
+            console.log('Song data being sent:', songData);
+
+            // Use POST for new songs, PUT for existing ones
+            const response = await fetch(
+                isNewSong ? '/api/songs' : `/api/songs/${this.currentSong.id}`,
+                {
+                    method: isNewSong ? 'POST' : 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(songData)
+                }
+            );
+
             if (response.ok) {
-                // Show success message
-                this.showSuccess(`${this.getResourceTypeLabel(this.currentResourceType)} added successfully!`);
+                this.showSuccess('Resource added successfully!');
                 
                 // Refresh song details if visible
                 if (window.songDetails && window.songDetails.getCurrentSong()?.id === this.currentSong.id) {
                     const updatedSong = await response.json();
                     window.songDetails.displaySong(updatedSong);
                 }
-
-                // Close modal after short delay
-                setTimeout(() => {
-                    this.closeReviewModal();
-                }, 1500);
+                
+                // Refresh the song list in case the resource status changed
+                if (window.jamber3App) {
+                    window.jamber3App.loadSongs();
+                }
             } else {
                 const error = await response.json();
-                this.showError('Failed to save resource: ' + error.error);
+                this.showError(null, 'Failed to save resource: ' + error.error);
             }
         } catch (error) {
-            console.error('Error accepting resource:', error);
-            this.showError('Failed to save resource. Please try again.');
+            console.error('Error saving resource:', error);
+            this.showError(null, 'Failed to save resource. Please try again.');
         }
     }
 
     /**
-     * Preview a resource URL
-     * @param {string} url - URL to preview
+     * Preview a resource URL in default browser
      */
     previewResource(url) {
-        // Open in new window/tab
-        window.open(url, '_blank');
-    }
-
-
-    /**
-     * Show manual entry form
-     */
-    showManualEntry() {
-        const resourceLabel = this.getResourceTypeLabel(this.currentResourceType);
-        const url = prompt(`Enter ${resourceLabel} URL manually:`);
-        
-        if (url && url.trim()) {
-            this.acceptManualResource(url.trim());
-        }
-    }
-
-    /**
-     * Accept manually entered resource
-     * @param {string} url - Manually entered URL
-     */
-    async acceptManualResource(url) {
-        try {
-            const updateData = {};
-            updateData[`${this.currentResourceType.slice(0, -1)}_url`] = url;
-            updateData[`${this.currentResourceType.slice(0, -1)}_verified`] = true;
-
-            const response = await fetch(`/api/songs/${this.currentSong.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(updateData)
-            });
-
-            if (response.ok) {
-                this.showSuccess(`${this.getResourceTypeLabel(this.currentResourceType)} added successfully!`);
-                
-                // Refresh song details
-                if (window.songDetails && window.songDetails.getCurrentSong()?.id === this.currentSong.id) {
-                    const updatedSong = await response.json();
-                    window.songDetails.displaySong(updatedSong);
-                }
-
-                setTimeout(() => {
-                    this.closeReviewModal();
-                }, 1500);
-            } else {
-                const error = await response.json();
-                this.showError('Failed to save resource: ' + error.error);
+        // For Electron app, use shell.openExternal to open in default browser
+        if (typeof require !== 'undefined') {
+            try {
+                const { shell } = require('electron');
+                shell.openExternal(url);
+            } catch (e) {
+                // Fallback to window.open if Electron not available
+                window.open(url, '_blank');
             }
-        } catch (error) {
-            console.error('Error saving manual resource:', error);
-            this.showError('Failed to save resource. Please try again.');
+        } else {
+            // Regular browser environment
+            window.open(url, '_blank');
         }
     }
 
     /**
-     * Show search progress
-     * @param {boolean} show - Whether to show progress
+     * Show/hide search progress
      */
-    showSearchProgress(show) {
-        const progressDiv = document.getElementById('searchProgress');
+    showSearchProgress(modal, show) {
+        const progressDiv = modal.querySelector('.search-progress');
         progressDiv.style.display = show ? 'block' : 'none';
-        
-        if (!show) {
-            const progressBar = document.getElementById('searchProgressBar');
-            const progressText = document.getElementById('searchProgressText');
-            progressBar.style.width = '0%';
-            progressText.textContent = 'Searching...';
-        }
-    }
-
-    /**
-     * Update search progress
-     * @param {Object} progress - Progress information
-     */
-    updateSearchProgress(progress) {
-        const progressBar = document.getElementById('searchProgressBar');
-        const progressText = document.getElementById('searchProgressText');
-        
-        if (progress.progress !== undefined) {
-            progressBar.style.width = `${progress.progress}%`;
-        }
-        
-        if (progress.message) {
-            progressText.textContent = progress.message;
-        }
     }
 
     /**
      * Show success message
-     * @param {string} message - Success message
      */
     showSuccess(message) {
-        // Could use a toast notification system
+        // Simple alert for now - could be replaced with toast notification
         alert(message);
     }
 
     /**
      * Show error message
-     * @param {string} message - Error message
      */
-    showError(message) {
-        alert(message);
-    }
-
-    /**
-     * Get resource type label
-     * @param {string} resourceType - Resource type
-     * @returns {string} Human-readable label
-     */
-    getResourceTypeLabel(resourceType) {
-        const labels = {
-            'guitar_tabs': 'Guitar Tabs',
-            'bass_tabs': 'Bass Tabs',
-            'lyrics': 'Lyrics'
-        };
-        return labels[resourceType] || resourceType;
+    showError(modal, message) {
+        if (modal) {
+            const container = modal.querySelector('.results-container');
+            container.innerHTML = `<div class="error-state"><p class="error">${message}</p></div>`;
+        } else {
+            alert(message);
+        }
     }
 
     /**
      * Escape HTML entities
-     * @param {string} text - Text to escape
      */
     escapeHtml(text) {
         const div = document.createElement('div');

@@ -2964,3 +2964,153 @@ body.dark-theme .btn.secondary {
 body.dark-theme .btn.secondary:hover {
     background: #5a6c7d;
 }
+
+/* Lyrics Popup Specific Styles */
+.lyrics-popup-modal {
+    z-index: 10001; /* Above other modals */
+}
+
+.lyrics-popup-content {
+    max-width: 1200px;
+    max-height: 80vh;
+    width: auto;
+    margin: 10% auto;
+}
+
+.lyrics-body {
+    padding: 20px;
+    max-height: calc(80vh - 100px);
+    overflow-y: auto;
+}
+
+.lyrics-content {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+    margin: 0;
+}
+
+/* URL Bar Styles for Resource Review Dialogs */
+.url-bar {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    gap: 10px;
+}
+
+.current-url-display {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: 'Courier New', monospace;
+    background: white;
+    color: #495057;
+}
+
+.current-url-display:focus {
+    outline: none;
+    border-color: #80bdff;
+}
+
+.save-page-btn {
+    padding: 8px 16px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.save-page-btn:hover:not(:disabled) {
+    background: #218838;
+}
+
+.save-page-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Manual Entry Styles for Resource Review Dialogs */
+.manual-entry {
+    margin-top: 20px;
+    padding: 15px;
+    border-top: 1px solid #e9ecef;
+    background: #f8f9fa;
+}
+
+.manual-url-input {
+    width: calc(100% - 80px);
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+    margin-right: 10px;
+}
+
+.save-manual-btn {
+    padding: 8px 16px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.save-manual-btn:hover {
+    background: #218838;
+}
+
+/* Dark theme styles for new components */
+body.dark-theme .lyrics-content {
+    background: #4a5568;
+    color: #e2e8f0;
+    border-color: #5a6c7d;
+}
+
+body.dark-theme .manual-entry {
+    background: #4a5568;
+    border-color: #5a6c7d;
+}
+
+body.dark-theme .manual-url-input {
+    background: #2d3748;
+    color: #e2e8f0;
+    border-color: #5a6c7d;
+}
+
+body.dark-theme .manual-url-input:focus {
+    border-color: #667eea;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+/* Dark theme styles for URL bar */
+body.dark-theme .url-bar {
+    background: #4a5568;
+    border-color: #5a6c7d;
+}
+
+body.dark-theme .current-url-display {
+    background: #2d3748;
+    color: #e2e8f0;
+    border-color: #5a6c7d;
+}
+
+body.dark-theme .current-url-display:focus {
+    border-color: #667eea;
+}
