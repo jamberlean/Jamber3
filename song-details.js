@@ -47,6 +47,13 @@ class SongDetails {
                 return;
             }
             
+            // Reset edit mode when switching to a different song
+            if (this.isEditMode) {
+                console.log('[DEBUG] Resetting edit mode for new song selection');
+                this.isEditMode = false;
+                this.originalSongData = null;
+            }
+            
             this.currentSong = song;
             
             if (!song) {
@@ -447,6 +454,58 @@ class SongDetails {
                 this.toggleCollapsibleSection(header);
             });
         });
+
+        // Add protective event handlers for edit mode text inputs to prevent conflicts
+        if (this.isEditMode) {
+            this.attachEditModeProtections();
+        }
+    }
+
+    /**
+     * Add protective event handlers for edit mode to prevent crashes during text selection
+     */
+    attachEditModeProtections() {
+        try {
+            const editInputs = this.container.querySelectorAll('input[type="text"], textarea');
+            editInputs.forEach(input => {
+                // Prevent drag events from bubbling up and potentially interfering with window bounds saving
+                input.addEventListener('mousedown', (e) => {
+                    // Allow normal text selection but prevent interference with window management
+                    e.stopPropagation();
+                });
+
+                input.addEventListener('selectstart', (e) => {
+                    // Allow text selection but prevent bubbling
+                    e.stopPropagation();
+                });
+
+                input.addEventListener('dragstart', (e) => {
+                    // Prevent drag operations that might conflict with window bounds saving
+                    e.stopPropagation();
+                });
+
+                // Add error handling for any input focus/blur issues
+                input.addEventListener('focus', (e) => {
+                    try {
+                        // Safely handle focus events
+                        e.stopPropagation();
+                    } catch (error) {
+                        console.error('Error in input focus handler:', error);
+                    }
+                });
+
+                input.addEventListener('blur', (e) => {
+                    try {
+                        // Safely handle blur events
+                        e.stopPropagation();
+                    } catch (error) {
+                        console.error('Error in input blur handler:', error);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Error attaching edit mode protections:', error);
+        }
     }
 
     /**
@@ -1141,7 +1200,9 @@ class SongDetails {
 
         const confirmation = confirm(
             `Are you sure you want to remove "${this.currentSong.title}" from your library?\n\n` +
-            'This will not delete the actual file, only remove it from Jamber3.'
+            'If the music file still exists on your hard drive, it will be marked as removed and won\'t be re-added on future scans.\n' +
+            'If the file no longer exists, the database record will be deleted entirely.\n\n' +
+            'The actual music file will not be deleted from your hard drive.'
         );
 
         if (confirmation) {
@@ -1303,6 +1364,8 @@ class SongDetails {
      */
     clear() {
         this.currentSong = null;
+        this.isEditMode = false;
+        this.originalSongData = null;
         this.renderEmptyState();
     }
 
@@ -1342,6 +1405,17 @@ class SongDetails {
     refresh() {
         if (this.currentSong) {
             this.render(this.currentSong);
+        }
+    }
+
+    /**
+     * Force refresh with updated song data, bypassing the same-song check
+     * @param {Object} updatedSong - Updated song object
+     */
+    forceRefresh(updatedSong) {
+        if (updatedSong) {
+            this.currentSong = updatedSong;
+            this.render(updatedSong);
         }
     }
 }
