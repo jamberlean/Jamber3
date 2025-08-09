@@ -1,0 +1,228 @@
+/* Help System Specific Styles */
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+    background: #f8f9fa;
+    color: #333;
+}
+
+.help-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    counter-reset: section-counter;
+}
+
+.help-container h2 {
+    counter-increment: section-counter;
+}
+
+.help-container h2:before {
+    content: counter(section-counter) ". ";
+    color: #28a745;
+}
+
+h1 {
+    color: #007bff;
+    text-align: center;
+    margin-bottom: 30px;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 10px;
+}
+
+h2 {
+    color: #28a745;
+    margin-top: 40px;
+    margin-bottom: 15px;
+    border-left: 4px solid #28a745;
+    padding-left: 15px;
+}
+
+h3 {
+    color: #dc3545;
+    margin-top: 25px;
+    margin-bottom: 10px;
+}
+
+/* Table of Contents */
+.toc {
+    background: #e9f4ff;
+    padding: 20px;
+    border-radius: 5px;
+    margin-bottom: 30px;
+    border-left: 4px solid #007bff;
+}
+
+.toc h2 {
+    margin-top: 0;
+    color: #007bff;
+    border: none;
+    padding: 0;
+}
+
+.toc h2:before {
+    content: none;
+}
+
+/* Main TOC list - numbered */
+.toc > ul {
+    list-style: none;
+    padding-left: 0;
+    counter-reset: toc-counter;
+}
+
+.toc > ul > li {
+    margin: 8px 0;
+    counter-increment: toc-counter;
+    padding-left: 16px;
+}
+
+.toc > ul > li:before {
+    content: counter(toc-counter) ". ";
+    font-weight: bold;
+    color: #007bff;
+    margin-left: -16px;
+    margin-right: 4px;
+}
+
+/* Sub-items - bulleted */
+.toc ul ul {
+    padding-left: 16px;
+    margin-top: 5px;
+    list-style-type: disc;
+    counter-reset: none;
+}
+
+.toc ul ul li {
+    font-size: 0.9em;
+    margin: 4px 0;
+    counter-increment: none;
+    padding-left: 16px;
+}
+
+.toc ul ul li:before {
+    content: none;
+}
+
+.toc a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.toc a:hover {
+    text-decoration: underline;
+}
+
+/* General list styling - all lists have 16px left padding */
+ol {
+    padding-left: 16px;
+    margin: 15px 0;
+    list-style-type: decimal;
+}
+
+ul {
+    padding-left: 16px;
+    margin: 15px 0;
+    list-style-type: disc;
+}
+
+li {
+    margin: 8px 0;
+    padding-left: 16px;
+    line-height: 1.6;
+}
+
+ol li {
+    list-style-type: decimal;
+}
+
+ul li {
+    list-style-type: disc;
+}
+
+/* Feature boxes and tips */
+.feature-box {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 15px 0;
+    border-left: 3px solid #6c757d;
+}
+
+.feature-box ul,
+.tip ul {
+    padding-left: 16px;
+}
+
+.feature-box li,
+.tip li {
+    padding-left: 16px;
+}
+
+.tip {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 5px;
+    padding: 12px;
+    margin: 15px 0;
+}
+
+.tip strong {
+    color: #155724;
+}
+
+.warning {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 5px;
+    padding: 12px;
+    margin: 15px 0;
+}
+
+.warning strong {
+    color: #721c24;
+}
+
+code {
+    background: #f8f9fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    color: #e83e8c;
+}
+
+.keyboard-shortcut {
+    background: #e9ecef;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-family: monospace;
+    font-size: 0.9em;
+    color: #495057;
+}
+
+.button-example {
+    display: inline-block;
+    background: #007bff;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.9em;
+    margin: 2px;
+}
+
+.button-example.secondary {
+    background: #6c757d;
+}
+
+.button-example.danger {
+    background: #dc3545;
+}

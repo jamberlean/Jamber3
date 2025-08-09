@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jamber3 Help</title>
+    <link rel="stylesheet" href="help-styles.css">
+</head>
+<body>
+    <div class="help-container">
+        <h1>Jamber3 Music Library Help</h1>
+        
+        <div class="toc">
+            <h2>Table of Contents</h2>
+            <ul>
+                <li><a href="#getting-started">Getting Started</a>
+                    <ul>
+                        <li><a href="#first-scan">First Time Setup</a></li>
+                        <li><a href="#interface-overview">Interface Overview</a></li>
+                    </ul>
+                </li>
+                <li><a href="#scanning-music">Scanning Music</a>
+                    <ul>
+                        <li><a href="#adding-folders">Adding Music Folders</a></li>
+                        <li><a href="#excluding-folders">Excluding Folders</a></li>
+                        <li><a href="#scan-process">The Scan Process</a></li>
+                    </ul>
+                </li>
+                <li><a href="#browsing-library">Browsing Your Library</a>
+                    <ul>
+                        <li><a href="#view-modes">View Modes</a></li>
+                        <li><a href="#searching">Searching Songs</a></li>
+                        <li><a href="#filtering">Filtering Options</a></li>
+                    </ul>
+                </li>
+                <li><a href="#setlist-management">Setlist Management</a>
+                    <ul>
+                        <li><a href="#creating-setlists">Creating Setlists</a></li>
+                        <li><a href="#adding-songs-setlists">Adding Songs to Setlists</a></li>
+                        <li><a href="#filtering-setlists">Filtering by Setlists</a></li>
+                    </ul>
+                </li>
+                <li><a href="#song-details">Song Details & Resources</a>
+                    <ul>
+                        <li><a href="#viewing-details">Viewing Song Details</a></li>
+                        <li><a href="#editing-songs">Editing Song Information</a></li>
+                        <li><a href="#finding-resources">Finding Guitar Tabs & Lyrics</a></li>
+                        <li><a href="#audio-playback">Audio Playback</a></li>
+                    </ul>
+                </li>
+                <li><a href="#troubleshooting">Troubleshooting</a>
+                    <ul>
+                        <li><a href="#common-issues">Common Issues</a></li>
+                        <li><a href="#performance-tips">Performance Tips</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+
+        <h2 id="getting-started">Getting Started</h2>
+        
+        <h3 id="first-scan">First Time Setup</h3>
+        <p>When you first launch Jamber3, you'll need to scan your music collection:</p>
+        <ol>
+            <li>Click the Settings ⚙️ button</li>
+            <li>Add your music folders using <span class="button-example secondary">+ Add Enabled Path</span></li>
+            <li>Click <span class="button-example">Save Settings</span></li>
+            <li>Click the <span class="button-example">Scan for Music</span> button</li>
+            <li>Wait for the scan process to build your library</li>
+        </ol>
+        
+        <div class="tip">
+            <strong>Tip:</strong> Jamber3 supports MP3, FLAC, WAV, and other common audio formats. It will extract metadata from your files automatically.
+        </div>
+
+        <h3 id="interface-overview">Interface Overview</h3>
+        <div class="feature-box">
+            <ul>
+                <li><strong>Toolbar:</strong> Contains Scan, Help, and Settings buttons</li>
+                <li><strong>Left Pane:</strong> Music library browser with search and filters</li>
+                <li><strong>Right Pane:</strong> Song details, resources, and playback controls</li>
+            </ul>
+        </div>
+
+        <h2 id="scanning-music">Scanning Music</h2>
+
+        <h3 id="adding-folders">Adding Music Folders</h3>
+        <p>To add music folders to your library:</p>
+        <ol>
+            <li>Click the Settings ⚙️ button</li>
+            <li>In the <strong>Music Directories</strong> section, click <span class="button-example secondary">+ Add Enabled Path</span></li>
+            <li>Browse and select your music folder</li>
+            <li>Click <span class="button-example">Add Path</span> to confirm</li>
+            <li>Click <span class="button-example">Save Settings</span></li>
+        </ol>
+
+        <h3 id="excluding-folders">Excluding Folders</h3>
+        <p>To exclude certain folders from scanning:</p>
+        <ol>
+            <li>In Settings, click <span class="button-example secondary">+ Add Excluded Path</span></li>
+            <li>Select folders you want to exclude (like system folders or non-music directories)</li>
+            <li>These folders will be skipped during scanning</li>
+        </ol>
+
+        <h3 id="scan-process">The Scan Process</h3>
+        <p>The scan process:</p>
+        <ul>
+            <li>Searches all enabled paths for music files</li>
+            <li>Extracts metadata (title, artist, album, etc.)</li>
+            <li>Builds a searchable database</li>
+            <li>Progress is shown in the status area</li>
+        </ul>
+
+        <div class="warning">
+            <strong>Note:</strong> Large music collections may take several minutes to scan initially. Subsequent scans are much faster as they only process new or changed files.
+        </div>
+
+        <h2 id="browsing-library">Browsing Your Library</h2>
+
+        <h3 id="view-modes">View Modes</h3>
+        <p>Choose how to organize your music library:</p>
+        <div class="feature-box">
+            <ul>
+                <li><strong>Artists:</strong> Organized by artist name with expandable albums</li>
+                <li><strong>Albums:</strong> Grouped by album with track listings</li>
+                <li><strong>Folders:</strong> Shows your music in its original folder structure</li>
+                <li><strong>All:</strong> Simple list of all songs</li>
+            </ul>
+        </div>
+
+        <h3 id="searching">Searching Songs</h3>
+        <p>Use the search box at the top of the left pane:</p>
+        <ul>
+            <li>Type artist names, song titles, or album names</li>
+            <li>Search is case-insensitive and searches as you type</li>
+            <li>Results update in real-time</li>
+        </ul>
+
+        <h3 id="filtering">Filtering Options</h3>
+        <p>Additional filtering options:</p>
+        <ul>
+            <li><strong>Setlist Filter:</strong> Show only songs from a specific setlist</li>
+            <li><strong>Resource Filter:</strong> Show only songs with guitar tabs, lyrics, or other resources</li>
+        </ul>
+
+        <h2 id="setlist-management">Setlist Management</h2>
+
+        <h3 id="creating-setlists">Creating Setlists</h3>
+        <p>Setlists help you organize songs for performances, practice, or themes:</p>
+        <ol>
+            <li>Go to Settings ⚙️</li>
+            <li>In the <strong>Setlists</strong> section, click <span class="button-example secondary">+ Add New Setlist</span></li>
+            <li>Enter a name for your setlist</li>
+            <li>Click <span class="button-example">Create Setlist</span></li>
+        </ol>
+
+        <h3 id="adding-songs-setlists">Adding Songs to Setlists</h3>
+        <p>To add songs to a setlist:</p>
+        <ol>
+            <li>Click on a song to view its details</li>
+            <li>In the <strong>Setlists</strong> section on the right</li>
+            <li>Select a setlist from the "Add to Setlist" dropdown</li>
+            <li>Click <span class="button-example secondary">Add</span></li>
+        </ol>
+
+        <p>To remove songs from setlists:</p>
+        <ul>
+            <li>In the song details, click the <span class="button-example danger">🗑️</span> trash icon next to the setlist name</li>
+        </ul>
+
+        <h3 id="filtering-setlists">Filtering by Setlists</h3>
+        <p>Use the setlist dropdown in the left pane to show only songs from a specific setlist. This is great for:</p>
+        <ul>
+            <li>Practicing a specific set</li>
+            <li>Reviewing songs for an upcoming performance</li>
+            <li>Organizing songs by difficulty or theme</li>
+        </ul>
+
+        <h2 id="song-details">Song Details & Resources</h2>
+
+        <h3 id="viewing-details">Viewing Song Details</h3>
+        <p>Click any song to see detailed information in the right pane:</p>
+        <div class="feature-box">
+            <ul>
+                <li><strong>Basic Info:</strong> Title, artist, album, duration</li>
+                <li><strong>File Info:</strong> Location, format, bitrate, file size</li>
+                <li><strong>Resources:</strong> Guitar tabs, bass tabs, lyrics links</li>
+                <li><strong>Setlist Membership:</strong> Which setlists contain this song</li>
+            </ul>
+        </div>
+
+        <h3 id="editing-songs">Editing Song Information</h3>
+        <p>To edit song information:</p>
+        <ol>
+            <li>View the song details</li>
+            <li>Click <span class="button-example secondary">Edit Song</span></li>
+            <li>Modify the title, artist, or album fields</li>
+            <li>Click <span class="button-example">Save Changes</span></li>
+        </ol>
+
+        <h3 id="finding-resources">Finding Guitar Tabs & Lyrics</h3>
+        <p>Jamber3 can help you find resources for learning songs:</p>
+        
+        <h4>Guitar Tabs:</h4>
+        <ul>
+            <li>Click <span class="button-example secondary">Find Guitar Tab</span></li>
+            <li>Review search results from Ultimate Guitar and other sources</li>
+            <li>Click <span class="button-example">Accept</span> to save the best result</li>
+        </ul>
+
+        <h4>Lyrics:</h4>
+        <ul>
+            <li>Click <span class="button-example secondary">Find Lyrics</span></li>
+            <li>Review and select the most accurate lyrics</li>
+            <li>Lyrics will be stored and displayed in the song details</li>
+        </ul>
+
+        <div class="tip">
+            <strong>Tip:</strong> You can also manually add resource URLs by clicking <span class="button-example secondary">Add Manual URL</span> and pasting links you've found elsewhere.
+        </div>
+
+        <h3 id="audio-playback">Audio Playback</h3>
+        <p>Control audio playback from the song details:</p>
+        <ul>
+            <li><strong>Play/Pause:</strong> Click the play button or use <span class="keyboard-shortcut">Spacebar</span></li>
+            <li><strong>Volume:</strong> Use the volume slider</li>
+            <li><strong>Seek:</strong> Click on the progress bar to jump to a specific position</li>
+            <li><strong>Pitch Control:</strong> Adjust the pitch up or down for practice (requires compatible audio format)</li>
+        </ul>
+
+        <h2 id="troubleshooting">Troubleshooting</h2>
+
+        <h3 id="common-issues">Common Issues</h3>
+        
+        <h4>Songs Not Appearing After Scan</h4>
+        <ul>
+            <li>Check that your music folders are added to "Enabled Paths" in Settings</li>
+            <li>Ensure folders aren't listed in "Excluded Paths"</li>
+            <li>Verify files are in supported formats (MP3, FLAC, WAV, etc.)</li>
+            <li>Try running a fresh scan</li>
+        </ul>
+
+        <h4>Search Not Working</h4>
+        <ul>
+            <li>Clear the search box and try again</li>
+            <li>Check if any filters are applied that might hide results</li>
+            <li>Verify songs exist by browsing in "All" view mode</li>
+        </ul>
+
+        <h4>Audio Playback Issues</h4>
+        <ul>
+            <li>Check that the audio file exists at its original location</li>
+            <li>Verify the file isn't corrupted by playing it in another audio player</li>
+            <li>Try adjusting the volume slider</li>
+        </ul>
+
+        <h3 id="performance-tips">Performance Tips</h3>
+        <div class="tip">
+            <strong>Performance Tips:</strong>
+            <ul>
+                <li>Exclude large non-music folders to speed up scanning</li>
+                <li>Keep your music collection organized in a reasonable folder structure</li>
+                <li>Regular scans are faster than initial scans</li>
+                <li>Close other resource-intensive applications during large scans</li>
+            </ul>
+        </div>
+
+        <div class="warning">
+            <strong>Need More Help?</strong> If you encounter issues not covered in this help guide, check the console (F12) for error messages that might help identify the problem.
+        </div>
+    </div>
+</body>
+</html>

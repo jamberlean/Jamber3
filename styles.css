@@ -3038,6 +3038,26 @@ body.dark-theme .waveform-canvas {
     border-top: 1px solid #e9ecef;
 }
 
+/* Help modal specific styles */
+.help-modal {
+    max-width: 1000px;
+    width: 95%;
+    max-height: 95vh;
+}
+
+.help-modal .modal-body {
+    padding: 0;
+    overflow-y: auto;
+}
+
+.help-modal .help-container {
+    margin: 0;
+    padding: 30px;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+}
+
 .settings-section {
     margin-bottom: 30px;
 }

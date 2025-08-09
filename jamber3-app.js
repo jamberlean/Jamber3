@@ -183,6 +183,12 @@ class Jamber3App {
             scanBtn.addEventListener('click', () => this.startMusicScan());
         }
 
+        // Help button
+        const helpBtn = document.getElementById('helpBtn');
+        if (helpBtn) {
+            helpBtn.addEventListener('click', () => this.openHelp());
+        }
+
         // Settings button
         const settingsBtn = document.getElementById('settingsBtn');
         if (settingsBtn) {
@@ -380,6 +386,101 @@ class Jamber3App {
      */
     openSettings() {
         this.showSettingsModal();
+    }
+
+    /**
+     * Open help modal
+     */
+    async openHelp() {
+        try {
+            // Load help content from help.html
+            const response = await fetch('/help.html');
+            if (!response.ok) {
+                throw new Error('Failed to load help content');
+            }
+            const helpHtml = await response.text();
+            
+            // Extract the body content from the help HTML
+            const parser = new DOMParser();
+            const helpDoc = parser.parseFromString(helpHtml, 'text/html');
+            const helpContent = helpDoc.querySelector('.help-container').outerHTML;
+            
+            await this.showHelpModal(helpContent);
+        } catch (error) {
+            console.error('Error loading help:', error);
+            this.showError('Failed to load help content');
+        }
+    }
+
+    /**
+     * Show help modal with the provided content
+     */
+    async showHelpModal(helpContent) {
+        // Remove existing modal if present
+        const existingModal = document.getElementById('helpModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Load help CSS
+        let helpStyles = '';
+        try {
+            const cssResponse = await fetch('/help-styles.css');
+            if (cssResponse.ok) {
+                helpStyles = `<style>${await cssResponse.text()}</style>`;
+            }
+        } catch (error) {
+            console.warn('Could not load help styles:', error);
+        }
+
+        // Create modal HTML
+        const modal = document.createElement('div');
+        modal.id = 'helpModal';
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content help-modal">
+                <div class="modal-header">
+                    <h2>Help</h2>
+                    <button class="modal-close" id="helpModalClose">&times;</button>
+                </div>
+                <div class="modal-body">
+                    ${helpStyles}
+                    ${helpContent}
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Add event listeners
+        const closeBtn = modal.querySelector('#helpModalClose');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                modal.classList.remove('show');
+                setTimeout(() => {
+                    if (modal.parentNode) {
+                        modal.parentNode.removeChild(modal);
+                    }
+                }, 300);
+            });
+        }
+
+        // Close on overlay click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('show');
+                setTimeout(() => {
+                    if (modal.parentNode) {
+                        modal.parentNode.removeChild(modal);
+                    }
+                }, 300);
+            }
+        });
+
+        // Show modal with animation
+        setTimeout(() => {
+            modal.classList.add('show');
+        }, 10);
     }
 
     /**
