@@ -1,0 +1,33 @@
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# Force text files to have LF line endings in the repository
+*.js text eol=lf
+*.json text eol=lf  
+*.html text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.sql text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Force batch files to have CRLF line endings (Windows requirement)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# VBScript files should use CRLF (Windows requirement)  
+*.vbs text eol=crlf
+
+# Binary files should not be processed
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.mp3 binary
+*.wav binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
