@@ -170,11 +170,31 @@ class ConfigManager {
     }
 
     /**
-     * Config saving is DISABLED - file is read-only
+     * Save configuration to file
+     * @param {Object} config - Configuration object to save
      */
     saveConfig(config = null) {
-        console.warn('Cannot save config - jamber3-config.json is read-only');
-        return false;
+        try {
+            const configToSave = config || this.config;
+            
+            // Ensure proper structure
+            if (!configToSave || typeof configToSave !== 'object') {
+                throw new Error('Invalid config object provided');
+            }
+
+            // Write to the config file with proper formatting
+            const configJson = JSON.stringify(configToSave, null, 2);
+            fs.writeFileSync(CONFIG_FILE, configJson, 'utf8');
+            
+            // Update in-memory config
+            this.config = configToSave;
+            
+            console.log('Config saved successfully to', CONFIG_FILE);
+            return true;
+        } catch (error) {
+            console.error('Error saving config:', error);
+            throw error;
+        }
     }
 
     /**

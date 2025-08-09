@@ -16,7 +16,6 @@
         <main>
             <div class="app-toolbar">
                 <button id="scanBtn" class="primary-btn">Scan for Music</button>
-                <button id="addSongBtn" class="secondary-btn">Add Song Manually</button>
                 <div class="toolbar-right">
                     <button id="settingsBtn" class="icon-btn" title="Settings">⚙️</button>
                 </div>
@@ -36,10 +35,15 @@
                             <button class="view-btn" data-view="all">All</button>
                         </div>
                         <div class="filter-controls">
+                            <div class="setlist-filter">
+                                <select id="setlistFilter" class="setlist-dropdown">
+                                    <option value="">- filter by setlist -</option>
+                                </select>
+                            </div>
                             <label class="filter-checkbox">
                                 <input type="checkbox" id="resourceFilter">
                                 <span class="checkmark"></span>
-                                Show only songs with resources
+                                Show all songs with resources
                             </label>
                         </div>
                     </div>
@@ -139,6 +143,5 @@
     <script src="resource-review.js"></script>
     <script src="audio-player.js"></script>
     <script src="jamber3-app.js"></script>
-    <script src="script.js"></script>
 </body>
 </html>

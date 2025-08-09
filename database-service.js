@@ -2,7 +2,7 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-const DB_FILE = path.join(__dirname, 'tablary.db');
+const DB_FILE = path.join(__dirname, 'jamber3.db');
 const JSON_BACKUP_FILE = path.join(__dirname, 'songs.json');
 const SCHEMA_FILE = path.join(__dirname, 'sqlite-schema.sql');
 
@@ -23,15 +23,22 @@ class DatabaseService {
             this.db.pragma('cache_size = 1000');
             this.db.pragma('temp_store = memory');
 
-            // Read and execute schema
-            const schema = fs.readFileSync(SCHEMA_FILE, 'utf8');
-            this.db.exec(schema);
+            // Execute schema more carefully to handle migrations
+            this.executeSchemaWithMigrations();
 
             // Migrate from JSON if exists and database is empty
             this.migrateFromJSON();
 
+
         } catch (error) {
             console.error('Error initializing database:', error);
+            if (this.db) {
+                try {
+                    this.db.close();
+                } catch (closeError) {
+                    console.error('Error closing database during cleanup:', closeError);
+                }
+            }
             this.db = null;
             throw error;
         }
@@ -136,6 +143,66 @@ class DatabaseService {
         }
     }
 
+    executeSchemaWithMigrations() {
+        try {
+            // Read the full schema file
+            const schemaContent = fs.readFileSync(SCHEMA_FILE, 'utf8');
+            
+            // Split schema into parts - we'll execute table creation separately from index creation
+            const statements = schemaContent.split(';').map(stmt => stmt.trim()).filter(stmt => stmt.length > 0);
+            
+            // Execute CREATE TABLE statements first
+            for (const statement of statements) {
+                if (statement.includes('CREATE TABLE')) {
+                    this.db.exec(statement + ';');
+                }
+            }
+            
+            // Run migrations to add any missing columns
+            this.runSchemaMigrations();
+            
+            // Now execute CREATE INDEX and other statements
+            for (const statement of statements) {
+                if (!statement.includes('CREATE TABLE')) {
+                    try {
+                        this.db.exec(statement + ';');
+                    } catch (error) {
+                        // Ignore errors for statements that might already exist or reference missing columns
+                        console.log(`Skipped statement (likely already exists): ${statement.substring(0, 50)}...`);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error executing schema with migrations:', error);
+            throw error;
+        }
+    }
+
+    runSchemaMigrations() {
+        try {
+            // Check if songs table exists first
+            const tablesResult = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='songs'").get();
+            if (!tablesResult) {
+                console.log('Songs table does not exist yet, skipping migrations');
+                return;
+            }
+
+            // Check if is_removed column exists, if not add it
+            const columns = this.db.prepare("PRAGMA table_info(songs)").all();
+            const hasIsRemovedColumn = columns.some(col => col.name === 'is_removed');
+            
+            if (!hasIsRemovedColumn) {
+                console.log('Adding is_removed column to songs table...');
+                this.db.exec('ALTER TABLE songs ADD COLUMN is_removed BOOLEAN DEFAULT 0');
+                this.db.exec('CREATE INDEX IF NOT EXISTS idx_songs_is_removed ON songs(is_removed)');
+                console.log('is_removed column added successfully');
+            }
+        } catch (error) {
+            console.error('Error running schema migrations:', error);
+            // Don't throw error as this is not critical for app startup
+        }
+    }
+
     getNextId() {
         const result = this.db.prepare("SELECT value FROM app_settings WHERE key = 'next_id'").get();
         return result ? parseInt(result.value) : 1;
@@ -186,7 +253,7 @@ class DatabaseService {
 
     getAllSongs() {
         try {
-            const stmt = this.db.prepare('SELECT * FROM songs ORDER BY created_at DESC');
+            const stmt = this.db.prepare('SELECT * FROM songs WHERE is_removed = 0 ORDER BY created_at DESC');
             const songs = stmt.all();
             
             // Convert boolean fields
@@ -196,7 +263,8 @@ class DatabaseService {
                 user_edited: Boolean(song.user_edited),
                 guitar_tab_verified: Boolean(song.guitar_tab_verified),
                 bass_tab_verified: Boolean(song.bass_tab_verified),
-                lyrics_verified: Boolean(song.lyrics_verified)
+                lyrics_verified: Boolean(song.lyrics_verified),
+                is_removed: Boolean(song.is_removed)
             }));
         } catch (error) {
             console.error('Error getting all songs:', error);
@@ -258,11 +326,53 @@ class DatabaseService {
 
     deleteSong(id) {
         try {
-            const stmt = this.db.prepare('DELETE FROM songs WHERE id = ?');
+            // Get the song details first to check file existence
+            const song = this.db.prepare('SELECT * FROM songs WHERE id = ?').get(parseInt(id));
+            if (!song) {
+                return false;
+            }
+
+            // Check if the physical file still exists
+            const fileExists = song.file_path && fs.existsSync(song.file_path);
+            
+            if (fileExists) {
+                // File exists: Mark as removed so it won't be re-added on future scans
+                const stmt = this.db.prepare('UPDATE songs SET is_removed = 1 WHERE id = ?');
+                const result = stmt.run(parseInt(id));
+                console.log(`Song marked as removed (file exists): ${song.title} - ${song.file_path}`);
+                return result.changes > 0;
+            } else {
+                // File no longer exists: Delete the record entirely
+                const stmt = this.db.prepare('DELETE FROM songs WHERE id = ?');
+                const result = stmt.run(parseInt(id));
+                console.log(`Song deleted from database (file not found): ${song.title} - ${song.file_path}`);
+                return result.changes > 0;
+            }
+        } catch (error) {
+            console.error('Error deleting song:', error);
+            return false;
+        }
+    }
+
+    markSongAsRemoved(id) {
+        try {
+            const stmt = this.db.prepare('UPDATE songs SET is_removed = 1 WHERE id = ?');
             const result = stmt.run(parseInt(id));
             return result.changes > 0;
         } catch (error) {
-            console.error('Error deleting song:', error);
+            console.error('Error marking song as removed:', error);
+            return false;
+        }
+    }
+
+    unmarkSongAsRemoved(id) {
+        try {
+            const stmt = this.db.prepare('UPDATE songs SET is_removed = 0, last_scanned = ? WHERE id = ?');
+            const result = stmt.run(new Date().toISOString(), parseInt(id));
+            console.log(`Song unmarked as removed (re-added to library): ${id}`);
+            return result.changes > 0;
+        } catch (error) {
+            console.error('Error unmarking song as removed:', error);
             return false;
         }
     }
@@ -458,7 +568,8 @@ class DatabaseService {
                     user_edited: Boolean(song.user_edited),
                     guitar_tab_verified: Boolean(song.guitar_tab_verified),
                     bass_tab_verified: Boolean(song.bass_tab_verified),
-                    lyrics_verified: Boolean(song.lyrics_verified)
+                    lyrics_verified: Boolean(song.lyrics_verified),
+                    is_removed: Boolean(song.is_removed)
                 };
             }
             return null;
@@ -569,6 +680,241 @@ class DatabaseService {
         } catch (error) {
             console.error('Error cleaning up excluded paths:', error);
             return 0;
+        }
+    }
+
+    /**
+     * Clean up songs that are no longer in any enabled path
+     * @param {string} removedPath - The path that was removed from enabled paths
+     * @param {Array} remainingEnabledPaths - Array of remaining enabled path strings
+     * @returns {number} Number of songs removed
+     */
+    cleanupSongsFromRemovedPath(removedPath, remainingEnabledPaths) {
+        if (!removedPath) return 0;
+
+        try {
+            const songs = this.getAllSongs();
+            let removedCount = 0;
+
+            const deleteStmt = this.db.prepare('DELETE FROM songs WHERE id = ?');
+            
+            const transaction = this.db.transaction((songsToCheck) => {
+                for (const song of songsToCheck) {
+                    if (!song.file_path) continue; // Keep manually added songs
+                    
+                    // Check if this song is from the removed path
+                    if (song.file_path.startsWith(removedPath)) {
+                        // Check if it's also covered by any remaining enabled path
+                        let isCoveredByOtherPath = false;
+                        for (const enabledPath of remainingEnabledPaths) {
+                            if (song.file_path.startsWith(enabledPath)) {
+                                isCoveredByOtherPath = true;
+                                break;
+                            }
+                        }
+                        
+                        // Only remove if not covered by any other enabled path
+                        if (!isCoveredByOtherPath) {
+                            console.log(`Removing song from removed path: ${song.title} (${song.file_path})`);
+                            deleteStmt.run(song.id);
+                            removedCount++;
+                        }
+                    }
+                }
+            });
+
+            transaction(songs);
+
+            if (removedCount > 0) {
+                console.log(`Removed ${removedCount} songs from removed enabled path: ${removedPath}`);
+            }
+
+            return removedCount;
+        } catch (error) {
+            console.error('Error cleaning up songs from removed enabled path:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * SETLIST METHODS
+     */
+
+    /**
+     * Create a new setlist
+     * @param {string} name - Setlist name (required, unique)
+     * @returns {Object|null} Created setlist object or null on failure
+     */
+    createSetlist(name) {
+        try {
+            const stmt = this.db.prepare(`
+                INSERT INTO setlists (name, created_at, updated_at)
+                VALUES (?, datetime('now'), datetime('now'))
+            `);
+            const result = stmt.run(name);
+            
+            if (result.lastInsertRowid) {
+                return this.getSetlist(result.lastInsertRowid);
+            }
+            return null;
+        } catch (error) {
+            console.error('Error creating setlist:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get a setlist by ID
+     * @param {number} id - Setlist ID
+     * @returns {Object|null} Setlist object or null if not found
+     */
+    getSetlist(id) {
+        try {
+            const stmt = this.db.prepare('SELECT * FROM setlists WHERE id = ?');
+            return stmt.get(id) || null;
+        } catch (error) {
+            console.error('Error getting setlist:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get all setlists with song counts
+     * @returns {Array} Array of setlist objects with song counts
+     */
+    getAllSetlists() {
+        try {
+            const stmt = this.db.prepare(`
+                SELECT s.*, COUNT(ss.song_id) as song_count
+                FROM setlists s
+                LEFT JOIN song_setlists ss ON s.id = ss.setlist_id
+                GROUP BY s.id
+                ORDER BY s.name ASC
+            `);
+            return stmt.all();
+        } catch (error) {
+            console.error('Error getting all setlists:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Delete a setlist (cascade deletes relationships)
+     * @param {number} id - Setlist ID
+     * @returns {boolean} True if deleted successfully
+     */
+    deleteSetlist(id) {
+        try {
+            const stmt = this.db.prepare('DELETE FROM setlists WHERE id = ?');
+            const result = stmt.run(id);
+            return result.changes > 0;
+        } catch (error) {
+            console.error('Error deleting setlist:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Add a song to a setlist
+     * @param {number} songId - Song ID
+     * @param {number} setlistId - Setlist ID
+     * @returns {boolean} True if added successfully
+     */
+    addSongToSetlist(songId, setlistId) {
+        try {
+            const stmt = this.db.prepare(`
+                INSERT INTO song_setlists (song_id, setlist_id, added_at)
+                VALUES (?, ?, datetime('now'))
+            `);
+            const result = stmt.run(songId, setlistId);
+            return result.changes > 0;
+        } catch (error) {
+            if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+                // Song already in setlist - not an error
+                return true;
+            }
+            console.error('Error adding song to setlist:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Remove a song from a setlist
+     * @param {number} songId - Song ID
+     * @param {number} setlistId - Setlist ID
+     * @returns {boolean} True if removed successfully
+     */
+    removeSongFromSetlist(songId, setlistId) {
+        try {
+            const stmt = this.db.prepare('DELETE FROM song_setlists WHERE song_id = ? AND setlist_id = ?');
+            const result = stmt.run(songId, setlistId);
+            return result.changes > 0;
+        } catch (error) {
+            console.error('Error removing song from setlist:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Get all songs in a setlist
+     * @param {number} setlistId - Setlist ID
+     * @returns {Array} Array of song objects
+     */
+    getSongsInSetlist(setlistId) {
+        try {
+            const stmt = this.db.prepare(`
+                SELECT s.*, ss.added_at as setlist_added_at
+                FROM songs s
+                INNER JOIN song_setlists ss ON s.id = ss.song_id
+                WHERE ss.setlist_id = ? AND s.is_removed = 0
+                ORDER BY ss.added_at DESC
+            `);
+            return stmt.all(setlistId);
+        } catch (error) {
+            console.error('Error getting songs in setlist:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get all setlists that contain a specific song
+     * @param {number} songId - Song ID
+     * @returns {Array} Array of setlist objects
+     */
+    getSetlistsForSong(songId) {
+        try {
+            const stmt = this.db.prepare(`
+                SELECT s.*, ss.added_at as setlist_added_at
+                FROM setlists s
+                INNER JOIN song_setlists ss ON s.id = ss.setlist_id
+                WHERE ss.song_id = ?
+                ORDER BY s.name ASC
+            `);
+            return stmt.all(songId);
+        } catch (error) {
+            console.error('Error getting setlists for song:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get setlist with song count
+     * @param {number} setlistId - Setlist ID
+     * @returns {Object|null} Setlist with song count
+     */
+    getSetlistWithSongCount(setlistId) {
+        try {
+            const stmt = this.db.prepare(`
+                SELECT s.*, COUNT(ss.song_id) as song_count
+                FROM setlists s
+                LEFT JOIN song_setlists ss ON s.id = ss.setlist_id
+                WHERE s.id = ?
+                GROUP BY s.id
+            `);
+            return stmt.get(setlistId) || null;
+        } catch (error) {
+            console.error('Error getting setlist with song count:', error);
+            return null;
         }
     }
 

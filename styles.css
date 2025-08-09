@@ -224,6 +224,33 @@ main {
     margin-top: 10px;
 }
 
+.setlist-filter {
+    margin-bottom: 10px;
+}
+
+.setlist-dropdown {
+    width: 100%;
+    padding: 6px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background: #fff;
+    color: #495057;
+    font-size: 12px;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.setlist-dropdown:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+    background: #f8f9ff;
+}
+
+.setlist-dropdown:hover {
+    border-color: #adb5bd;
+}
+
 .filter-checkbox {
     display: flex;
     align-items: center;
@@ -861,9 +888,15 @@ form {
     }
 }
 
-/* Resource Review Modal */
+/* Resource Review Modal (for searching) */
 .resource-review-modal .modal-content {
     max-width: 800px;
+    max-height: 90vh;
+}
+
+/* Resource Display Modal (for viewing existing URLs) */
+.resource-display-modal .modal-content {
+    max-width: 1600px;
     max-height: 90vh;
 }
 
@@ -1217,6 +1250,194 @@ body.dark-theme .library-search-input::placeholder {
     color: #a0aec0;
 }
 
+body.dark-theme .setlist-dropdown {
+    background: #4a5568;
+    border-color: #718096;
+    color: #e2e8f0;
+}
+
+body.dark-theme .setlist-dropdown:focus {
+    border-color: #4299e1;
+    box-shadow: 0 0 0 2px rgba(66,153,225,0.25);
+    background: #2d3748;
+}
+
+body.dark-theme .setlist-dropdown:hover {
+    border-color: #a0aec0;
+}
+
+/* Setlist Controls in Song Details */
+.setlists-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.setlist-controls-left {
+    flex: 1;
+    min-width: 0;
+}
+
+.setlist-memberships-right {
+    flex: 1;
+    min-width: 0;
+}
+
+.setlist-add-control {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.setlist-add-label {
+    font-weight: 500;
+    font-size: 12px;
+    color: #495057;
+}
+
+.setlist-memberships-label {
+    font-weight: 500;
+    font-size: 12px;
+    color: #495057;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.setlist-add-wrapper {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.setlist-add-dropdown {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background: #fff;
+    color: #495057;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.setlist-add-dropdown:disabled {
+    background: #e9ecef;
+    color: #6c757d;
+    cursor: not-allowed;
+}
+
+.add-to-setlist-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* Setlists Container */
+.setlists-container {
+    /* Remove margin-top since we're side by side now */
+}
+
+.loading-setlists {
+    padding: 10px;
+    text-align: center;
+    font-size: 12px;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.error-setlists {
+    padding: 10px;
+    text-align: center;
+    font-size: 12px;
+    color: #dc3545;
+    font-style: italic;
+}
+
+.no-setlists-message {
+    padding: 10px;
+    font-size: 12px;
+    color: #6c757d;
+    font-style: italic;
+    text-align: left;
+}
+
+.song-setlist-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+}
+
+.setlist-name {
+    font-size: 12px;
+    color: #495057;
+    font-weight: 500;
+}
+
+.remove-from-setlist {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #dc3545;
+    border-radius: 2px;
+    transition: background-color 0.2s;
+}
+
+.remove-from-setlist:hover {
+    background: #f5c6cb;
+}
+
+/* Dark Theme - Setlist Controls */
+body.dark-theme .setlist-add-label {
+    color: #e2e8f0;
+}
+
+body.dark-theme .setlist-memberships-label {
+    color: #e2e8f0;
+}
+
+body.dark-theme .setlist-add-dropdown {
+    background: #4a5568;
+    border-color: #718096;
+    color: #e2e8f0;
+}
+
+body.dark-theme .setlist-add-dropdown:disabled {
+    background: #2d3748;
+    color: #a0aec0;
+}
+
+body.dark-theme .song-setlist-item {
+    background: #2d3748;
+    border-color: #4a5568;
+}
+
+body.dark-theme .setlist-name {
+    color: #e2e8f0;
+}
+
+body.dark-theme .remove-from-setlist:hover {
+    background: #742a2a;
+}
+
+body.dark-theme .empty-setlists,
+body.dark-theme .loading-setlists {
+    color: #a0aec0;
+}
+
+body.dark-theme .no-setlists-message {
+    color: #a0aec0;
+}
+
+body.dark-theme .error-setlists {
+    color: #fc8181;
+}
+
 body.dark-theme .view-btn {
     border-color: #4a5568;
     color: #e2e8f0;
@@ -1425,6 +1646,11 @@ body.dark-theme .btn-secondary:hover {
 
 /* Dark theme for resource review modal */
 body.dark-theme .resource-review-modal .modal-content {
+    background: #2d3748;
+}
+
+/* Dark theme for resource display modal */
+body.dark-theme .resource-display-modal .modal-content {
     background: #2d3748;
 }
 
@@ -1999,16 +2225,29 @@ body.dark-theme .audio-volume-slider {
 
 .advanced-controls {
     display: flex;
-    gap: 20px;
+    gap: 30px;
     align-items: flex-start;
     flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+.control-group:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: -15px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: #dee2e6;
 }
 
 .control-group {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    min-width: 150px;
+    flex: 0 0 auto;
+    width: fit-content;
 }
 
 .control-label {
@@ -2019,11 +2258,15 @@ body.dark-theme .audio-volume-slider {
 }
 
 .speed-group {
-    flex: 2;
+    /* Remove flex grow to size based on content */
+    flex: 0 0 auto;
+    width: fit-content;
 }
 
 .pitch-group, .loop-group {
-    flex: 1;
+    /* Remove flex grow to size based on content */
+    flex: 0 0 auto;
+    width: fit-content;
 }
 
 .speed-presets {
@@ -2564,6 +2807,14 @@ body.dark-theme .audio-advanced-section {
 
 body.dark-theme .control-label {
     color: #8fa6ff;
+}
+
+body.dark-theme .experimental-label {
+    color: #a0aec0 !important;
+}
+
+body.dark-theme .control-group:not(:last-child)::after {
+    background: #4a5568;
 }
 
 body.dark-theme .control-slider {
@@ -3113,4 +3364,116 @@ body.dark-theme .current-url-display {
 
 body.dark-theme .current-url-display:focus {
     border-color: #667eea;
+}
+
+/* Path Input Modal Styles */
+.path-input-modal {
+    width: 500px;
+    max-width: 90vw;
+}
+
+.input-section {
+    margin-bottom: 20px;
+}
+
+.input-section label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #495057;
+}
+
+.path-input-field {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    background-color: #fff;
+    transition: border-color 0.3s;
+    box-sizing: border-box;
+}
+
+.path-input-field:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.input-description {
+    margin-top: 8px;
+    margin-bottom: 0;
+    font-size: 13px;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+.validation-message {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    min-height: 20px;
+}
+
+.validation-message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.validation-message.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.validation-message.info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.validation-message:empty {
+    display: none;
+}
+
+/* Dark theme support for path input modal */
+.dark-theme .path-input-modal {
+    background: #2d3748;
+    color: #e2e8f0;
+}
+
+.dark-theme .path-input-field {
+    background: #4a5568;
+    border-color: #4a5568;
+    color: #e2e8f0;
+}
+
+.dark-theme .path-input-field:focus {
+    border-color: #63b3ed;
+    box-shadow: 0 0 0 0.2rem rgba(99, 179, 237, 0.25);
+}
+
+.dark-theme .input-description {
+    color: #a0aec0;
+}
+
+.dark-theme .validation-message.error {
+    background-color: #2d1b1e;
+    color: #feb2b2;
+    border-color: #9b2c2c;
+}
+
+.dark-theme .validation-message.success {
+    background-color: #1a2e1a;
+    color: #9ae6b4;
+    border-color: #2f855a;
+}
+
+.dark-theme .validation-message.info {
+    background-color: #1a2332;
+    color: #90cdf4;
+    border-color: #2c5282;
 }

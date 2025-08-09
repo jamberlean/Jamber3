@@ -60,6 +60,9 @@ class Jamber3App {
             if (response.ok) {
                 const songs = await response.json();
                 window.songExplorer.loadSongs(songs);
+                
+                // Also refresh setlists dropdown
+                await this.loadSetlists();
             }
         } catch (error) {
             console.error('Error loading songs:', error);
@@ -87,6 +90,9 @@ class Jamber3App {
                 const songs = await response.json();
                 window.songExplorer.loadSongs(songs);
 
+                // Also refresh setlists dropdown
+                await this.loadSetlists();
+
                 window.progressIndicator.update('loading-songs', {
                     message: `Loaded ${songs.length} songs`,
                     progress: 100
@@ -104,6 +110,68 @@ class Jamber3App {
         }
     }
 
+    /**
+     * Load setlists and populate dropdown
+     */
+    async loadSetlists() {
+        try {
+            const response = await fetch('/api/setlists');
+            if (response.ok) {
+                const setlists = await response.json();
+                this.populateSetlistDropdown(setlists);
+            }
+        } catch (error) {
+            console.error('Error loading setlists:', error);
+        }
+    }
+
+    /**
+     * Refresh the setlist dropdown with updated data
+     */
+    async refreshSetlistDropdown() {
+        await this.loadSetlists();
+    }
+
+    /**
+     * Populate the setlist filter dropdown
+     * @param {Array} setlists - Array of setlist objects
+     */
+    populateSetlistDropdown(setlists) {
+        const setlistFilter = document.getElementById('setlistFilter');
+        if (!setlistFilter) return;
+
+        // Store current selection to preserve it
+        const currentSelection = setlistFilter.value;
+
+        // Clear existing options except the first one - but do it more carefully
+        const existingOptions = Array.from(setlistFilter.querySelectorAll('option')).filter(option => option.value !== '');
+        existingOptions.forEach(option => option.remove());
+
+        // Ensure we have the default option
+        let defaultOption = setlistFilter.querySelector('option[value=""]');
+        if (!defaultOption) {
+            defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = '- filter by setlist -';
+            setlistFilter.insertBefore(defaultOption, setlistFilter.firstChild);
+        } else {
+            // Update text in case it changed
+            defaultOption.textContent = '- filter by setlist -';
+        }
+
+        // Add setlist options
+        setlists.forEach(setlist => {
+            const option = document.createElement('option');
+            option.value = setlist.id;
+            option.textContent = `${setlist.name} (${setlist.song_count || 0})`;
+            setlistFilter.appendChild(option);
+        });
+
+        // Restore previous selection if it still exists
+        if (currentSelection && setlistFilter.querySelector(`option[value="${currentSelection}"]`)) {
+            setlistFilter.value = currentSelection;
+        }
+    }
 
     /**
      * Initialize event listeners
@@ -241,17 +309,45 @@ class Jamber3App {
                 window.progressIndicator.hide('music-scan');
                 
                 let message = '';
-                if (processResults.new > 0) {
+                if (processResults.new > 0 || processResults.removed > 0) {
                     message = `Scan complete!\n\nDiscovered: ${processResults.discovered} files\nProcessed: ${processResults.processed || processResults.discovered} files\nNew songs: ${processResults.new}\nAlready in library: ${processResults.existing}`;
+                    
+                    if (processResults.removed > 0) {
+                        message += `\n\nRemoved ${processResults.removed} songs:`;
+                        if (processResults.removedMissing > 0) {
+                            message += `\n  • ${processResults.removedMissing} deleted files`;
+                        }
+                        if (processResults.removedExcluded > 0) {
+                            message += `\n  • ${processResults.removedExcluded} from excluded paths`;
+                        }
+                    }
                 } else {
                     message = `Scan complete!\n\nDiscovered: ${processResults.discovered} files\nProcessed: ${processResults.processed || processResults.discovered} files\nNo new songs found. ${processResults.existing} songs were already in your library.`;
+                    
+                    if (processResults.removed > 0) {
+                        message += `\n\nRemoved ${processResults.removed} songs:`;
+                        if (processResults.removedMissing > 0) {
+                            message += `\n  • ${processResults.removedMissing} deleted files`;
+                        }
+                        if (processResults.removedExcluded > 0) {
+                            message += `\n  • ${processResults.removedExcluded} from excluded paths`;
+                        }
+                    }
                 }
                 
                 if (processResults.truncated) {
                     message += `\n\n⚠️ Large collection detected!\nOnly the first 1000 files were processed.\nRun scan again to process more files.`;
                 }
                 
-                alert(message);
+                // Use a custom modal instead of alert to avoid breaking input focus
+                this.showScanResults(message);
+                
+                // Ensure search input remains functional
+                setTimeout(() => {
+                    if (window.songExplorer) {
+                        window.songExplorer.restoreSearchInput();
+                    }
+                }, 200);
             }, 1500);
 
         } catch (error) {
@@ -300,6 +396,14 @@ class Jamber3App {
      * Delete a song
      */
     async deleteSong(song) {
+        // Show confirmation dialog
+        const songDisplay = song.artist ? `"${song.title}" by ${song.artist}` : `"${song.title}"`;
+        const confirmed = confirm(`Are you sure you want to delete ${songDisplay}?\n\nThis action cannot be undone.`);
+        
+        if (!confirmed) {
+            return;
+        }
+        
         try {
             const response = await fetch(`/api/songs/${song.id}`, {
                 method: 'DELETE'
@@ -345,6 +449,19 @@ class Jamber3App {
         };
 
         document.addEventListener('keydown', (e) => {
+            // Don't handle shortcuts when user is typing in an input field
+            const activeElement = document.activeElement;
+            const isTyping = activeElement && (
+                activeElement.tagName === 'INPUT' ||
+                activeElement.tagName === 'TEXTAREA' ||
+                activeElement.contentEditable === 'true'
+            );
+            
+            // Skip shortcut handling if user is typing
+            if (isTyping) {
+                return;
+            }
+            
             const key = this.getKeyString(e);
             const handler = shortcuts[key];
             
@@ -411,7 +528,12 @@ class Jamber3App {
             }
             
             const config = await response.json();
-            this.createSettingsModal(config);
+            
+            // Also fetch setlists for the settings modal
+            const setlistsResponse = await fetch('/api/setlists');
+            const setlists = setlistsResponse.ok ? await setlistsResponse.json() : [];
+            
+            this.createSettingsModal(config, setlists);
         } catch (error) {
             console.error('Error loading settings:', error);
             this.showError('Failed to load settings');
@@ -421,11 +543,17 @@ class Jamber3App {
     /**
      * Create and display the settings modal
      */
-    createSettingsModal(config) {
+    createSettingsModal(config, setlists = []) {
         // Remove existing modal if present
         const existingModal = document.getElementById('settingsModal');
         if (existingModal) {
             existingModal.remove();
+        }
+        
+        // Also close any existing setlist input modal to prevent orphaned handlers
+        const existingSetlistModal = document.getElementById('setlistInputModal');
+        if (existingSetlistModal) {
+            existingSetlistModal.remove();
         }
 
         // Create modal HTML
@@ -439,6 +567,15 @@ class Jamber3App {
                     <button class="modal-close" id="settingsModalClose">&times;</button>
                 </div>
                 <div class="modal-body">
+                    <div class="settings-section">
+                        <h3>Setlists</h3>
+                        <p class="settings-description">Organize songs into custom groups and playlists:</p>
+                        <div class="path-list" id="setListsList">
+                            ${this.renderSetListsList(setlists)}
+                        </div>
+                        <button class="btn secondary" id="addNewSetList">Add New Setlist</button>
+                    </div>
+                    
                     <div class="settings-section">
                         <h3>Enabled Scan Paths</h3>
                         <p class="settings-description">Directories that will be scanned for music files:</p>
@@ -465,12 +602,34 @@ class Jamber3App {
         `;
 
         document.body.appendChild(modal);
-        this.attachSettingsEventListeners(config);
+        this.attachSettingsEventListeners(config, setlists);
 
         // Show modal with animation
         setTimeout(() => {
             modal.classList.add('show');
         }, 10);
+    }
+
+    /**
+     * Render setlists list with remove buttons
+     */
+    renderSetListsList(setlists) {
+        if (!setlists || setlists.length === 0) {
+            return '<div class="empty-state">No setlists created yet</div>';
+        }
+
+        return setlists.map((setlist, index) => `
+            <div class="path-item" data-type="setlist" data-index="${index}" data-id="${setlist.id}">
+                <span class="path-text">
+                    <strong>${this.escapeHtml(setlist.name)}</strong>
+                    ${setlist.description ? `<br><small>${this.escapeHtml(setlist.description)}</small>` : ''}
+                    <small class="setlist-count">(${setlist.song_count || 0} songs)</small>
+                </span>
+                <button class="btn-icon remove-setlist" title="Remove setlist">
+                    <span>🗑️</span>
+                </button>
+            </div>
+        `).join('');
     }
 
     /**
@@ -494,7 +653,7 @@ class Jamber3App {
     /**
      * Attach event listeners to settings modal
      */
-    attachSettingsEventListeners(config) {
+    attachSettingsEventListeners(config, setlists = []) {
         const modal = document.getElementById('settingsModal');
         
         // Close modal events
@@ -514,6 +673,19 @@ class Jamber3App {
             }
         });
 
+        // Add setlist button - ensure DOM is ready
+        setTimeout(() => {
+            const addSetlistBtn = document.getElementById('addNewSetList');
+            if (addSetlistBtn) {
+                // Remove any existing listeners first
+                addSetlistBtn.replaceWith(addSetlistBtn.cloneNode(true));
+                const newAddSetlistBtn = document.getElementById('addNewSetList');
+                newAddSetlistBtn.addEventListener('click', () => {
+                    this.showAddSetListDialog();
+                });
+            }
+        }, 10);
+
         // Add path buttons
         document.getElementById('addEnabledPath')?.addEventListener('click', () => {
             this.showAddPathDialog('enabled', config);
@@ -525,10 +697,20 @@ class Jamber3App {
 
         // Remove path buttons
         modal.querySelectorAll('.remove-path').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 const pathItem = e.target.closest('.path-item');
                 if (pathItem) {
-                    this.removePath(pathItem, config);
+                    await this.removePath(pathItem, config);
+                }
+            });
+        });
+
+        // Remove setlist buttons
+        modal.querySelectorAll('.remove-setlist').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const setlistItem = e.target.closest('.path-item');
+                if (setlistItem) {
+                    await this.removeSetList(setlistItem);
                 }
             });
         });
@@ -556,46 +738,240 @@ class Jamber3App {
      * Show dialog to add a new path
      */
     showAddPathDialog(type, config) {
-        const path = prompt(`Enter a new ${type} path:`);
-        if (path && path.trim()) {
-            this.addPath(type, path.trim(), config);
+        // Create modal dialog instead of using prompt
+        this.createPathInputModal(type, config);
+    }
+
+    /**
+     * Create path input modal dialog
+     */
+    createPathInputModal(type, config) {
+        // Remove any existing path input modal
+        const existingModal = document.getElementById('pathInputModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const modal = document.createElement('div');
+        modal.id = 'pathInputModal';
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content path-input-modal">
+                <div class="modal-header">
+                    <h2>Add ${type.charAt(0).toUpperCase() + type.slice(1)} Path</h2>
+                    <button class="modal-close" id="pathInputModalClose">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-section">
+                        <label for="pathInput">Directory Path:</label>
+                        <input type="text" 
+                               id="pathInput" 
+                               placeholder="Enter full directory path (e.g., C:\\Music or /Users/username/Music)"
+                               class="path-input-field">
+                        <p class="input-description">
+                            ${type === 'enabled' ? 
+                                'Enter a directory path to scan for music files. The directory must exist on your system.' :
+                                'Enter a directory path to exclude from scanning. Can be a full path or pattern.'}
+                        </p>
+                        <div id="pathValidationMessage" class="validation-message"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn primary" id="savePathBtn">Add Path</button>
+                    <button class="btn secondary" id="cancelPathBtn">Cancel</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        
+        // Attach event listeners
+        const closeBtn = document.getElementById('pathInputModalClose');
+        const cancelBtn = document.getElementById('cancelPathBtn');
+        const saveBtn = document.getElementById('savePathBtn');
+        const pathInput = document.getElementById('pathInput');
+        
+        // Close modal handlers
+        [closeBtn, cancelBtn].forEach(btn => {
+            btn.addEventListener('click', () => this.closePathInputModal());
+        });
+
+        // Click outside to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.closePathInputModal();
+            }
+        });
+
+        // Save path handler
+        saveBtn.addEventListener('click', () => {
+            const path = pathInput.value.trim();
+            if (path) {
+                this.addPathWithValidation(type, path, config);
+            } else {
+                this.showPathValidationMessage('Please enter a directory path.', 'error');
+            }
+        });
+
+        // Enter key handler
+        pathInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const path = pathInput.value.trim();
+                if (path) {
+                    this.addPathWithValidation(type, path, config);
+                }
+            }
+        });
+
+        // Show modal with animation
+        setTimeout(() => {
+            modal.classList.add('show');
+            pathInput.focus();
+        }, 10);
+    }
+
+    /**
+     * Close path input modal
+     */
+    closePathInputModal() {
+        const modal = document.getElementById('pathInputModal');
+        if (modal) {
+            modal.classList.remove('show');
+            setTimeout(() => {
+                modal.remove();
+            }, 300);
         }
     }
 
     /**
-     * Add a new path to the configuration
+     * Show validation message in path input modal
      */
-    addPath(type, newPath, config) {
-        // Update the config object
-        if (type === 'enabled') {
-            if (!config.scan_directories.enabled_paths.includes(newPath)) {
-                config.scan_directories.enabled_paths.push(newPath);
-            }
-        } else if (type === 'excluded') {
-            if (!config.scan_directories.excluded_paths.includes(newPath)) {
-                config.scan_directories.excluded_paths.push(newPath);
-            }
+    showPathValidationMessage(message, type = 'info') {
+        const msgElement = document.getElementById('pathValidationMessage');
+        if (msgElement) {
+            msgElement.textContent = message;
+            msgElement.className = `validation-message ${type}`;
         }
-
-        // Re-render the path list
-        this.refreshPathLists(config);
     }
 
     /**
-     * Remove a path from the configuration
+     * Add a new path with server-side validation
      */
-    removePath(pathItem, config) {
+    async addPathWithValidation(type, newPath, config) {
+        try {
+            // Show loading state
+            this.showPathValidationMessage('Validating path...', 'info');
+            
+            const endpoint = type === 'enabled' ? '/api/config/add-enabled-path' : '/api/config/add-excluded-path';
+            
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path: newPath })
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                // Success - close modal and refresh
+                this.closePathInputModal();
+                this.showMessage(result.message || `Successfully added "${newPath}" to ${type} paths.`, 'success');
+                
+                // Refresh the settings modal with updated config
+                setTimeout(() => {
+                    this.createSettingsModal(result.config);
+                }, 500);
+            } else {
+                // Show error message
+                this.showPathValidationMessage(
+                    result.details || result.error || 'Failed to add path', 
+                    'error'
+                );
+            }
+        } catch (error) {
+            console.error('Error adding path:', error);
+            this.showPathValidationMessage('Network error: Could not add path.', 'error');
+        }
+    }
+
+    /**
+     * Remove a path from the configuration with server-side processing
+     */
+    async removePath(pathItem, config) {
         const type = pathItem.dataset.type;
         const index = parseInt(pathItem.dataset.index);
-
+        
+        let pathToRemove;
         if (type === 'enabled') {
-            config.scan_directories.enabled_paths.splice(index, 1);
+            pathToRemove = config.scan_directories.enabled_paths[index];
         } else if (type === 'excluded') {
-            config.scan_directories.excluded_paths.splice(index, 1);
+            pathToRemove = config.scan_directories.excluded_paths[index];
         }
 
-        // Re-render the path lists
-        this.refreshPathLists(config);
+        if (!pathToRemove) {
+            console.error('Could not determine path to remove');
+            return;
+        }
+
+        // Show confirmation dialog
+        const pathDisplay = pathToRemove.length > 50 ? 
+            pathToRemove.substring(0, 50) + '...' : 
+            pathToRemove;
+
+        let confirmMessage = `Are you sure you want to remove this ${type} path?\n\n${pathDisplay}`;
+        
+        if (type === 'enabled') {
+            confirmMessage += '\n\n⚠️ WARNING: All songs from this folder will be removed from your library!';
+        }
+
+        const confirmed = confirm(confirmMessage);
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            // Call the appropriate server endpoint
+            const endpoint = type === 'enabled' ? 
+                '/api/config/remove-enabled-path' : 
+                '/api/config/remove-excluded-path';
+            
+            const response = await fetch(endpoint, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path: pathToRemove })
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                // Success - show message and refresh settings modal
+                this.showMessage(result.message || `Successfully removed "${pathToRemove}" from ${type} paths.`, 'success');
+                
+                // Refresh the settings modal with updated config
+                setTimeout(() => {
+                    this.createSettingsModal(result.config);
+                }, 1000);
+
+                // Refresh the song list if songs were removed
+                if (result.removedSongs && result.removedSongs > 0) {
+                    setTimeout(() => {
+                        if (window.jamber3App) {
+                            window.jamber3App.loadSongs();
+                        }
+                    }, 1500);
+                }
+            } else {
+                // Show error message
+                this.showError(result.details || result.error || 'Failed to remove path');
+            }
+        } catch (error) {
+            console.error('Error removing path:', error);
+            this.showError('Network error: Could not remove path.');
+        }
     }
 
     /**
@@ -617,13 +993,264 @@ class Jamber3App {
     attachRemoveListeners(config) {
         const modal = document.getElementById('settingsModal');
         modal.querySelectorAll('.remove-path').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 const pathItem = e.target.closest('.path-item');
                 if (pathItem) {
-                    this.removePath(pathItem, config);
+                    await this.removePath(pathItem, config);
                 }
             });
         });
+    }
+
+    /**
+     * Show dialog to add a new setlist
+     */
+    showAddSetListDialog() {
+        // Create modal dialog for setlist creation
+        this.createSetListInputModal();
+    }
+
+    /**
+     * Create setlist input modal dialog
+     */
+    createSetListInputModal() {
+        // Remove any existing modal completely - force cleanup
+        const existingModal = document.getElementById('setlistInputModal');
+        if (existingModal) {
+            // Remove all event listeners by cloning and replacing
+            const cleanModal = existingModal.cloneNode(true);
+            if (existingModal.parentNode) {
+                existingModal.parentNode.removeChild(existingModal);
+            }
+        }
+        
+        // Also clear any potential input field references that might be cached
+        window.setlistNameInputRef = null;
+
+        // Create fresh modal
+        const modalHtml = `
+            <div id="setlistInputModal" class="modal-overlay">
+                <div class="modal-content path-input-modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Add New Setlist</h2>
+                        <button class="modal-close" onclick="window.jamber3App.closeSetListInputModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="input-section">
+                            <label for="setlistNameInput">Name:</label>
+                            <input type="text" 
+                                   id="setlistNameInput" 
+                                   placeholder="Enter setlist name"
+                                   class="path-input-field">
+                                   
+                            <div id="setlistValidationMessage" class="validation-message"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn primary" onclick="window.jamber3App.saveSetlistFromModal()">Create Setlist</button>
+                        <button class="btn secondary" onclick="window.jamber3App.closeSetListInputModal()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add modal to DOM
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Get modal and input with fresh references
+        const modal = document.getElementById('setlistInputModal');
+        const nameInput = document.getElementById('setlistNameInput');
+        
+        // Store reference for debugging
+        window.setlistNameInputRef = nameInput;
+        
+        // Ensure input is completely reset
+        nameInput.value = '';
+        nameInput.disabled = false;
+        nameInput.readOnly = false;
+        
+        // Remove any existing event listeners on the input first
+        nameInput.onkeydown = null;
+        nameInput.oninput = null;
+        nameInput.onchange = null;
+        nameInput.onclick = null;
+        nameInput.onfocus = null;
+        nameInput.onblur = null;
+        
+        // Simple click outside handler
+        modal.onclick = function(e) {
+            if (e.target === modal) {
+                window.jamber3App.closeSetListInputModal();
+            }
+        };
+        
+        // Use addEventListener for more reliable event handling
+        nameInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                window.jamber3App.saveSetlistFromModal();
+            }
+        });
+        
+        // Show modal with animation
+        setTimeout(() => {
+            modal.classList.add('show');
+            // Focus input after animation starts and ensure it's ready
+            setTimeout(() => {
+                nameInput.focus();
+                // Force cursor to appear
+                nameInput.click();
+                // Verify input is working by testing it
+                console.log('Input element state:', {
+                    disabled: nameInput.disabled,
+                    readOnly: nameInput.readOnly,
+                    tabIndex: nameInput.tabIndex,
+                    focused: document.activeElement === nameInput
+                });
+            }, 100);
+        }, 10);
+    }
+    
+    /**
+     * Save setlist from modal
+     */
+    saveSetlistFromModal() {
+        const nameInput = document.getElementById('setlistNameInput');
+        if (nameInput) {
+            const name = nameInput.value.trim();
+            if (name) {
+                this.createSetListWithValidation(name);
+            } else {
+                this.showSetListValidationMessage('Please enter a setlist name.', 'error');
+            }
+        }
+    }
+
+    /**
+     * Close setlist input modal
+     */
+    closeSetListInputModal() {
+        const modal = document.getElementById('setlistInputModal');
+        if (modal) {
+            modal.classList.remove('show');
+            
+            setTimeout(() => {
+                if (modal.parentNode) {
+                    modal.remove();
+                }
+            }, 300);
+        }
+    }
+
+    /**
+     * Show validation message in setlist input modal
+     */
+    showSetListValidationMessage(message, type = 'info') {
+        const msgElement = document.getElementById('setlistValidationMessage');
+        if (msgElement) {
+            msgElement.textContent = message;
+            msgElement.className = `validation-message ${type}`;
+        }
+    }
+
+    /**
+     * Create a new setlist with server-side validation
+     */
+    async createSetListWithValidation(name) {
+        try {
+            // Show loading state
+            this.showSetListValidationMessage('Creating setlist...', 'info');
+            
+            const response = await fetch('/api/setlists', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // Success - close modal and refresh settings
+                this.closeSetListInputModal();
+                
+                // Refresh the settings modal and main dropdown
+                setTimeout(async () => {
+                    try {
+                        const configResponse = await fetch('/api/config');
+                        const setlistsResponse = await fetch('/api/setlists');
+                        
+                        if (configResponse.ok && setlistsResponse.ok) {
+                            const config = await configResponse.json();
+                            const setlists = await setlistsResponse.json();
+                            this.createSettingsModal(config, setlists);
+                            
+                            // Also refresh main dropdown
+                            this.populateSetlistDropdown(setlists);
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing settings:', error);
+                    }
+                }, 500);
+            } else {
+                // Show error message
+                this.showSetListValidationMessage(
+                    result.error || 'Failed to create setlist', 
+                    'error'
+                );
+            }
+        } catch (error) {
+            console.error('Error creating setlist:', error);
+            this.showSetListValidationMessage('Network error: Could not create setlist.', 'error');
+        }
+    }
+
+    /**
+     * Remove a setlist
+     */
+    async removeSetList(setlistItem) {
+        const setlistId = parseInt(setlistItem.dataset.id);
+        const setlistName = setlistItem.querySelector('.path-text strong').textContent;
+
+        // Show confirmation dialog
+        const confirmed = confirm(`Are you sure you want to delete the setlist "${setlistName}"?\n\nThis will remove the setlist but songs will remain in your library.`);
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/setlists/${setlistId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                // Refresh the settings modal and main dropdown
+                setTimeout(async () => {
+                    try {
+                        const configResponse = await fetch('/api/config');
+                        const setlistsResponse = await fetch('/api/setlists');
+                        
+                        if (configResponse.ok && setlistsResponse.ok) {
+                            const config = await configResponse.json();
+                            const setlists = await setlistsResponse.json();
+                            this.createSettingsModal(config, setlists);
+                            
+                            // Also refresh main dropdown
+                            this.populateSetlistDropdown(setlists);
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing settings:', error);
+                    }
+                }, 1000);
+            } else {
+                const result = await response.json();
+                this.showError(result.error || 'Failed to delete setlist');
+            }
+        } catch (error) {
+            console.error('Error deleting setlist:', error);
+            this.showError('Network error: Could not delete setlist.');
+        }
     }
 
     /**
@@ -741,6 +1368,155 @@ For more information, visit the Jamber3 documentation.
      */
     showError(message) {
         alert('Error: ' + message);
+    }
+    
+    /**
+     * Show scan results in a custom modal
+     */
+    showScanResults(message) {
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        `;
+        
+        // Create modal content
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 450px;
+            height: 320px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+        
+        // Add dark theme support
+        if (document.body.classList.contains('dark-theme')) {
+            modal.style.background = '#2d3748';
+            modal.style.color = '#e2e8f0';
+        }
+        
+        // Create content
+        const title = document.createElement('h2');
+        title.textContent = 'Scan Results';
+        title.style.cssText = `
+            margin: 0 0 15px 0;
+            flex-shrink: 0;
+        `;
+        
+        const contentContainer = document.createElement('div');
+        contentContainer.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            padding-right: 10px;
+        `;
+        
+        const content = document.createElement('pre');
+        content.textContent = message;
+        content.style.cssText = `
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: inherit;
+            margin: 0;
+            line-height: 1.5;
+        `;
+        
+        contentContainer.appendChild(content);
+        
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+            flex-shrink: 0;
+            text-align: center;
+            padding-top: 10px;
+            border-top: 1px solid #e9ecef;
+        `;
+        
+        const button = document.createElement('button');
+        button.textContent = 'OK';
+        button.style.cssText = `
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        `;
+        
+        button.addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            // Restore search input after modal closes with proper cleanup
+            setTimeout(() => {
+                if (window.songExplorer) {
+                    window.songExplorer.restoreSearchInput();
+                    // Force re-focus on search input if needed
+                    const searchInput = document.getElementById('librarySearchInput');
+                    if (searchInput) {
+                        searchInput.focus();
+                        searchInput.blur();
+                        // Re-enable all input capabilities
+                        searchInput.style.pointerEvents = 'auto';
+                        searchInput.style.zIndex = 'auto';
+                        searchInput.tabIndex = 0;
+                    }
+                }
+            }, 100);
+        });
+        
+        buttonContainer.appendChild(button);
+        
+        // Allow closing with Escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                document.body.removeChild(overlay);
+                document.removeEventListener('keydown', handleEscape);
+                // Restore search input after modal closes with proper cleanup
+                setTimeout(() => {
+                    if (window.songExplorer) {
+                        window.songExplorer.restoreSearchInput();
+                        // Force re-focus on search input if needed
+                        const searchInput = document.getElementById('librarySearchInput');
+                        if (searchInput) {
+                            searchInput.focus();
+                            searchInput.blur();
+                            // Re-enable all input capabilities
+                            searchInput.style.pointerEvents = 'auto';
+                            searchInput.style.zIndex = 'auto';
+                            searchInput.tabIndex = 0;
+                        }
+                    }
+                }, 100);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+        
+        // Update dark theme border color
+        if (document.body.classList.contains('dark-theme')) {
+            buttonContainer.style.borderTopColor = '#4a5568';
+        }
+        
+        modal.appendChild(title);
+        modal.appendChild(contentContainer);
+        modal.appendChild(buttonContainer);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        
+        // Focus the button
+        button.focus();
     }
 
     /**

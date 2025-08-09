@@ -379,16 +379,38 @@ app.post('/api/scan/process', async (req, res) => {
         // Clean up songs from excluded paths before processing new files
         const config = configManager.getConfig();
         const excludedPaths = config.scan_directories.excluded_paths || [];
-        const removedCount = db.cleanupExcludedPaths(excludedPaths);
-        if (removedCount > 0) {
+        const removedFromExcluded = db.cleanupExcludedPaths(excludedPaths);
+        if (removedFromExcluded > 0) {
+            console.log(`[Server]: Removed ${removedFromExcluded} songs from excluded paths`);
+        }
+        
+        // Clean up songs with missing files (files that have been deleted from disk)
+        const removedMissing = db.cleanupMissingSongs();
+        if (removedMissing > 0) {
+            console.log(`[Server]: Removed ${removedMissing} songs with missing files`);
         }
 
-        // Filter out files that already exist in database FIRST
+        // Handle existing vs new files, including re-adding previously removed songs
         const unprocessedFiles = [];
+        const removedToRestore = [];
+        
         for (const filePath of allFiles) {
             const existing = db.getSongByFilePath(filePath);
             if (!existing) {
+                // File not in database - needs processing
                 unprocessedFiles.push(filePath);
+            } else if (existing.is_removed) {
+                // File was previously marked as removed - restore it
+                removedToRestore.push(existing.id);
+            }
+            // Skip files that exist and are not removed (already processed)
+        }
+
+        // Restore previously removed songs that were found again
+        let restoredCount = 0;
+        for (const songId of removedToRestore) {
+            if (db.unmarkSongAsRemoved(songId)) {
+                restoredCount++;
             }
         }
 
@@ -427,7 +449,11 @@ app.post('/api/scan/process', async (req, res) => {
                 discovered: allFiles.length,
                 processed: filesToProcess.length,
                 new: songsMetadata.length,
-                existing: allFiles.length - unprocessedFiles.length,
+                existing: allFiles.length - unprocessedFiles.length - restoredCount,
+                restored: restoredCount,
+                removed: removedMissing + removedFromExcluded,
+                removedMissing: removedMissing,
+                removedExcluded: removedFromExcluded,
                 remaining: unprocessedFiles.length - filesToProcess.length,
                 songs: addedSongs,
                 truncated: unprocessedFiles.length > maxFiles,
@@ -441,7 +467,11 @@ app.post('/api/scan/process', async (req, res) => {
                 discovered: allFiles.length,
                 processed: filesToProcess.length,
                 new: 0,
-                existing: allFiles.length - unprocessedFiles.length,
+                existing: allFiles.length - unprocessedFiles.length - restoredCount,
+                restored: restoredCount,
+                removed: removedMissing + removedFromExcluded,
+                removedMissing: removedMissing,
+                removedExcluded: removedFromExcluded,
                 remaining: unprocessedFiles.length - filesToProcess.length,
                 songs: [],
                 truncated: unprocessedFiles.length > maxFiles,
@@ -531,8 +561,8 @@ app.delete('/api/config/remove-directory', (req, res) => {
     }
 });
 
-// Configuration locking endpoints
-app.post('/api/config/exclude-path', async (req, res) => {
+// Path addition endpoints with validation
+app.post('/api/config/add-enabled-path', async (req, res) => {
     try {
         const { path } = req.body;
         
@@ -540,26 +570,240 @@ app.post('/api/config/exclude-path', async (req, res) => {
             return res.status(400).json({ error: 'Path is required' });
         }
 
-        // Add to excluded paths
-        const success = configManager.addExcludedPath(path);
+        // Validate that the path exists
+        if (!fs.existsSync(path)) {
+            return res.status(400).json({ 
+                error: 'Path does not exist',
+                details: `The directory "${path}" could not be found on your system. Please verify the path is correct and try again.`
+            });
+        }
+
+        // Check if it's actually a directory
+        const stats = fs.statSync(path);
+        if (!stats.isDirectory()) {
+            return res.status(400).json({ 
+                error: 'Path is not a directory',
+                details: `"${path}" is not a directory. Please select a folder path.`
+            });
+        }
+
+        // Get current config and add the path
+        const config = configManager.getConfig();
         
-        if (success) {
-            // Clean up existing songs from excluded path
-            const removedCount = db.cleanupExcludedPaths([path]);
-            
+        if (config.scan_directories.enabled_paths.includes(path)) {
+            return res.status(400).json({ 
+                error: 'Path already exists',
+                details: `"${path}" is already in the enabled paths list.`
+            });
+        }
+
+        // Add the path
+        config.scan_directories.enabled_paths.push(path);
+        
+        // Try to save the config (this might require updating config-manager)
+        try {
+            configManager.saveConfig(config);
+            res.json({ 
+                success: true, 
+                path: path,
+                config: configManager.getConfig(),
+                message: `Successfully added "${path}" to enabled paths.`
+            });
+        } catch (saveError) {
+            // Fallback: just update in memory for this session
+            res.json({ 
+                success: true, 
+                path: path,
+                config: config,
+                message: `Added "${path}" to enabled paths (temporary - will need manual config update for persistence).`
+            });
+        }
+    } catch (error) {
+        console.error('Error adding enabled path:', error);
+        res.status(500).json({ 
+            error: 'Failed to add enabled path',
+            details: error.message 
+        });
+    }
+});
+
+app.post('/api/config/add-excluded-path', async (req, res) => {
+    try {
+        const { path } = req.body;
+        
+        if (!path) {
+            return res.status(400).json({ error: 'Path is required' });
+        }
+
+        // For excluded paths, we don't require them to exist (they might be patterns or deleted paths)
+        // But we do validate if it's provided as an absolute path that it exists
+        if (path.includes(':') || path.startsWith('/')) {
+            // This looks like an absolute path, validate it exists
+            if (!fs.existsSync(path)) {
+                return res.status(400).json({ 
+                    error: 'Path does not exist',
+                    details: `The directory "${path}" could not be found on your system. Please verify the path is correct and try again.`
+                });
+            }
+        }
+
+        // Get current config
+        const config = configManager.getConfig();
+        
+        if (config.scan_directories.excluded_paths.includes(path)) {
+            return res.status(400).json({ 
+                error: 'Path already exists',
+                details: `"${path}" is already in the excluded paths list.`
+            });
+        }
+
+        // Add the path
+        config.scan_directories.excluded_paths.push(path);
+        
+        // Clean up existing songs from excluded path
+        const removedCount = db.cleanupExcludedPaths([path]);
+        
+        // Try to save the config
+        try {
+            configManager.saveConfig(config);
             res.json({ 
                 success: true, 
                 path: path,
                 removedSongs: removedCount,
-                config: configManager.getConfig() 
+                config: configManager.getConfig(),
+                message: `Successfully added "${path}" to excluded paths. ${removedCount > 0 ? `Removed ${removedCount} songs from this path.` : ''}`
             });
-        } else {
-            res.status(500).json({ error: 'Failed to exclude path' });
+        } catch (saveError) {
+            // Fallback: just update in memory for this session
+            res.json({ 
+                success: true, 
+                path: path,
+                removedSongs: removedCount,
+                config: config,
+                message: `Added "${path}" to excluded paths (temporary - will need manual config update for persistence). ${removedCount > 0 ? `Removed ${removedCount} songs from this path.` : ''}`
+            });
         }
     } catch (error) {
-        console.error('Error excluding path:', error);
-        res.status(500).json({ error: 'Failed to exclude path' });
+        console.error('Error adding excluded path:', error);
+        res.status(500).json({ 
+            error: 'Failed to add excluded path',
+            details: error.message 
+        });
     }
+});
+
+// Path removal endpoints with cleanup
+app.delete('/api/config/remove-enabled-path', async (req, res) => {
+    try {
+        const { path } = req.body;
+        
+        if (!path) {
+            return res.status(400).json({ error: 'Path is required' });
+        }
+
+        // Get current config
+        const config = configManager.getConfig();
+        
+        if (!config.scan_directories.enabled_paths.includes(path)) {
+            return res.status(400).json({ 
+                error: 'Path not found',
+                details: `"${path}" is not in the enabled paths list.`
+            });
+        }
+
+        // Remove the path from enabled paths
+        const index = config.scan_directories.enabled_paths.indexOf(path);
+        const removedPath = config.scan_directories.enabled_paths.splice(index, 1)[0];
+        
+        // Clean up songs from the removed path
+        const remainingEnabledPaths = config.scan_directories.enabled_paths;
+        const removedSongsCount = db.cleanupSongsFromRemovedPath(removedPath, remainingEnabledPaths);
+        
+        // Try to save the config
+        try {
+            configManager.saveConfig(config);
+            res.json({ 
+                success: true, 
+                path: removedPath,
+                removedSongs: removedSongsCount,
+                config: configManager.getConfig(),
+                message: `Successfully removed "${removedPath}" from enabled paths. ${removedSongsCount > 0 ? `Removed ${removedSongsCount} songs from this path.` : 'No songs were affected.'}`
+            });
+        } catch (saveError) {
+            // Fallback: just update in memory for this session
+            res.json({ 
+                success: true, 
+                path: removedPath,
+                removedSongs: removedSongsCount,
+                config: config,
+                message: `Removed "${removedPath}" from enabled paths (temporary - will need manual config update for persistence). ${removedSongsCount > 0 ? `Removed ${removedSongsCount} songs from this path.` : 'No songs were affected.'}`
+            });
+        }
+    } catch (error) {
+        console.error('Error removing enabled path:', error);
+        res.status(500).json({ 
+            error: 'Failed to remove enabled path',
+            details: error.message 
+        });
+    }
+});
+
+app.delete('/api/config/remove-excluded-path', async (req, res) => {
+    try {
+        const { path } = req.body;
+        
+        if (!path) {
+            return res.status(400).json({ error: 'Path is required' });
+        }
+
+        // Get current config
+        const config = configManager.getConfig();
+        
+        if (!config.scan_directories.excluded_paths.includes(path)) {
+            return res.status(400).json({ 
+                error: 'Path not found',
+                details: `"${path}" is not in the excluded paths list.`
+            });
+        }
+
+        // Remove the path from excluded paths
+        const index = config.scan_directories.excluded_paths.indexOf(path);
+        const removedPath = config.scan_directories.excluded_paths.splice(index, 1)[0];
+        
+        // Try to save the config
+        try {
+            configManager.saveConfig(config);
+            res.json({ 
+                success: true, 
+                path: removedPath,
+                config: configManager.getConfig(),
+                message: `Successfully removed "${removedPath}" from excluded paths.`
+            });
+        } catch (saveError) {
+            // Fallback: just update in memory for this session
+            res.json({ 
+                success: true, 
+                path: removedPath,
+                config: config,
+                message: `Removed "${removedPath}" from excluded paths (temporary - will need manual config update for persistence).`
+            });
+        }
+    } catch (error) {
+        console.error('Error removing excluded path:', error);
+        res.status(500).json({ 
+            error: 'Failed to remove excluded path',
+            details: error.message 
+        });
+    }
+});
+
+// Legacy endpoint - keeping for compatibility
+app.post('/api/config/exclude-path', async (req, res) => {
+    // Redirect to the new endpoint
+    return await app._router.handle(
+        { ...req, url: '/api/config/add-excluded-path', path: '/api/config/add-excluded-path' }, 
+        res
+    );
 });
 
 app.delete('/api/config/exclude-path', (req, res) => {
@@ -669,6 +913,125 @@ app.put('/api/config/paths', (req, res) => {
     }
 });
 
+// SETLIST API ENDPOINTS
+
+// Get all setlists
+app.get('/api/setlists', async (req, res) => {
+    try {
+        const setlists = db.getAllSetlists();
+        res.json(setlists);
+    } catch (error) {
+        console.error('Error fetching setlists:', error);
+        res.status(500).json({ error: 'Failed to fetch setlists' });
+    }
+});
+
+// Create new setlist
+app.post('/api/setlists', async (req, res) => {
+    try {
+        const { name } = req.body;
+        
+        if (!name || !name.trim()) {
+            return res.status(400).json({ error: 'Setlist name is required' });
+        }
+
+        const setlist = db.createSetlist(name.trim());
+        
+        if (setlist) {
+            res.status(201).json(setlist);
+        } else {
+            res.status(500).json({ error: 'Failed to create setlist' });
+        }
+    } catch (error) {
+        console.error('Error creating setlist:', error);
+        if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+            res.status(400).json({ error: 'A setlist with this name already exists' });
+        } else {
+            res.status(500).json({ error: 'Failed to create setlist' });
+        }
+    }
+});
+
+// Delete setlist
+app.delete('/api/setlists/:id', async (req, res) => {
+    try {
+        const success = db.deleteSetlist(parseInt(req.params.id));
+        if (success) {
+            res.json({ message: 'Setlist deleted successfully' });
+        } else {
+            res.status(404).json({ error: 'Setlist not found' });
+        }
+    } catch (error) {
+        console.error('Error deleting setlist:', error);
+        res.status(500).json({ error: 'Failed to delete setlist' });
+    }
+});
+
+// Get songs in a setlist
+app.get('/api/setlists/:id/songs', async (req, res) => {
+    try {
+        const songs = db.getSongsInSetlist(parseInt(req.params.id));
+        res.json(songs);
+    } catch (error) {
+        console.error('Error fetching setlist songs:', error);
+        res.status(500).json({ error: 'Failed to fetch setlist songs' });
+    }
+});
+
+// Get setlists for a song
+app.get('/api/songs/:id/setlists', async (req, res) => {
+    try {
+        const songId = parseInt(req.params.id);
+        const setlists = db.getSetlistsForSong(songId);
+        res.json(setlists);
+    } catch (error) {
+        console.error('Error fetching song setlists:', error);
+        res.status(500).json({ error: 'Failed to fetch song setlists' });
+    }
+});
+
+// Add song to setlist
+app.post('/api/songs/:id/setlists', async (req, res) => {
+    try {
+        const songId = parseInt(req.params.id);
+        const { setlistId } = req.body;
+        
+        if (!setlistId) {
+            return res.status(400).json({ error: 'Setlist ID is required' });
+        }
+
+        const success = db.addSongToSetlist(songId, parseInt(setlistId));
+        
+        if (success) {
+            res.json({ message: 'Song added to setlist successfully' });
+        } else {
+            res.status(500).json({ error: 'Failed to add song to setlist' });
+        }
+    } catch (error) {
+        console.error('Error adding song to setlist:', error);
+        res.status(500).json({ error: 'Failed to add song to setlist' });
+    }
+});
+
+// Remove song from setlist
+app.delete('/api/songs/:id/setlists/:setlistId', async (req, res) => {
+    try {
+        const songId = parseInt(req.params.id);
+        const setlistId = parseInt(req.params.setlistId);
+        
+        const success = db.removeSongFromSetlist(songId, setlistId);
+        
+        if (success) {
+            res.json({ message: 'Song removed from setlist successfully' });
+        } else {
+            res.status(404).json({ error: 'Song not found in setlist' });
+        }
+    } catch (error) {
+        console.error('Error removing song from setlist:', error);
+        res.status(500).json({ error: 'Failed to remove song from setlist' });
+    }
+});
+
 // Database backup endpoints
 app.get('/api/backup', async (req, res) => {
     try {
@@ -726,8 +1089,52 @@ app.post('/api/restore', (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Jamber3 server running on http://localhost:${PORT}`);
     // Signal that the server is ready
     console.log('SERVER_READY');
+});
+
+// Graceful shutdown handling
+const gracefulShutdown = (signal) => {
+    console.log(`Received ${signal}. Shutting down gracefully...`);
+    
+    // Close the HTTP server
+    server.close(() => {
+        console.log('HTTP server closed');
+        
+        // Close database connection
+        if (db) {
+            try {
+                db.close();
+                console.log('Database connection closed');
+            } catch (error) {
+                console.error('Error closing database:', error);
+            }
+        }
+        
+        // Exit the process
+        process.exit(0);
+    });
+    
+    // Force close after 5 seconds
+    setTimeout(() => {
+        console.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+    }, 5000);
+};
+
+// Listen for termination signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    gracefulShutdown('UNCAUGHT_EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown('UNHANDLED_REJECTION');
 });

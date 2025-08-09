@@ -452,12 +452,13 @@ class ResourceReview {
             );
 
             if (response.ok) {
+                const updatedSong = await response.json();
                 this.showSuccess('Resource added successfully!');
                 
                 // Refresh song details if visible
                 if (window.songDetails && window.songDetails.getCurrentSong()?.id === this.currentSong.id) {
-                    const updatedSong = await response.json();
-                    window.songDetails.displaySong(updatedSong);
+                    // Force refresh with updated song data
+                    window.songDetails.forceRefresh(updatedSong);
                 }
                 
                 // Refresh the song list in case the resource status changed

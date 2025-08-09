@@ -18,6 +18,7 @@ class SongExplorer {
         this.expandedNodes = new Set();
         this.searchQuery = '';
         this.resourceFilter = false;
+        this.selectedSetlistId = null;
         this.isRendering = false; // Prevent render loops
         this.attachedEventListeners = new Set(); // Track attached listeners
         this.lastSearchTime = 0; // Throttle search requests
@@ -59,6 +60,7 @@ class SongExplorer {
      * Initialize search input
      */
     initializeSearchInput() {
+        console.log('[DEBUG] initializeSearchInput called from:', new Error().stack.split('\n')[2]);
         const librarySearchInput = document.getElementById('librarySearchInput');
         if (!librarySearchInput) {
             // Single retry after DOM load instead of recursive calls
@@ -102,6 +104,19 @@ class SongExplorer {
             resourceFilter.removeEventListener('change', this.handleResourceFilterChange);
             resourceFilter.addEventListener('change', this.handleResourceFilterChange);
         }
+        
+        // Setlist filter dropdown
+        const setlistFilter = document.getElementById('setlistFilter');
+        if (setlistFilter) {
+            if (!this.handleSetlistFilterChange) {
+                this.handleSetlistFilterChange = (e) => {
+                    e.stopPropagation();
+                    this.handleSetlistFilter(e.target.value);
+                };
+            }
+            setlistFilter.removeEventListener('change', this.handleSetlistFilterChange);
+            setlistFilter.addEventListener('change', this.handleSetlistFilterChange);
+        }
     }
 
     /**
@@ -119,8 +134,8 @@ class SongExplorer {
         this.songs = songs || [];
         this.filteredSongs = [...this.songs];
         
-        // Apply existing filters if present (search query OR resource filter)
-        if (this.searchQuery || this.resourceFilter) {
+        // Apply existing filters if present (search query OR resource filter OR setlist filter)
+        if (this.searchQuery || this.resourceFilter || this.selectedSetlistId) {
             this.applyFilters();
         } else {
             this.render();
@@ -162,6 +177,36 @@ class SongExplorer {
     }
 
     /**
+     * Handle setlist filter change
+     * @param {string} setlistId - Selected setlist ID (empty string for none)
+     */
+    handleSetlistFilter(setlistId) {
+        this.selectedSetlistId = setlistId || null;
+        this.applyFilters();
+    }
+
+    /**
+     * Apply setlist filter to songs array
+     * @param {Array} songs - Songs to filter
+     * @returns {Promise<Array>} Promise that resolves to filtered songs
+     */
+    async applySetlistFilter(songs) {
+        try {
+            const response = await fetch(`/api/setlists/${this.selectedSetlistId}/songs`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch setlist songs: ${response.status}`);
+            }
+            const setlistSongs = await response.json();
+            const setlistSongIds = new Set(setlistSongs.map(song => song.id));
+            
+            return songs.filter(song => setlistSongIds.has(song.id));
+        } catch (error) {
+            console.error('Error applying setlist filter:', error);
+            return songs; // Return unfiltered if error
+        }
+    }
+
+    /**
      * Apply all active filters
      */
     applyFilters() {
@@ -197,6 +242,26 @@ class SongExplorer {
                        song.lyrics_url ||
                        song.tablature_url; // Legacy field support
             });
+        }
+
+        // Apply setlist filter
+        if (this.selectedSetlistId) {
+            this.applySetlistFilter(filtered).then(filteredBySetlist => {
+                this.filteredSongs = filteredBySetlist;
+                this.render();
+                
+                // Restore focus and cursor position after render
+                if (hadFocus && searchInput) {
+                    searchInput.focus();
+                    searchInput.value = currentValue;
+                    searchInput.setSelectionRange(selectionStart, selectionEnd);
+                }
+            }).catch(error => {
+                console.error('Error filtering by setlist:', error);
+                this.filteredSongs = filtered;
+                this.render();
+            });
+            return; // Exit early for async setlist filtering
         }
 
         this.filteredSongs = filtered;
@@ -345,12 +410,15 @@ class SongExplorer {
                         this.attachTreeEventListeners();
                         this.isRendering = false; // Reset render flag
                         
-                        // Re-initialize search input to ensure it stays responsive
-                        // This is necessary because the render might affect focus/input handling
-                        this.initializeSearchInput();
+                        // Only re-initialize search input if there's evidence it's not working
+                        // This prevents unnecessary event listener churning
+                        const searchInput = document.getElementById('librarySearchInput');
+                        if (searchInput && (searchInput.disabled || searchInput.readOnly)) {
+                            console.log('[DEBUG] Re-initializing search input due to disabled/readonly state');
+                            this.initializeSearchInput();
+                        }
                         
                         // Ensure the search input is not disabled or readonly
-                        const searchInput = document.getElementById('librarySearchInput');
                         if (searchInput) {
                             searchInput.disabled = false;
                             searchInput.readOnly = false;
@@ -866,21 +934,42 @@ class SongExplorer {
         const searchInput = document.getElementById('librarySearchInput');
         if (!searchInput) return;
         
-        // Remove any blocking attributes
+        console.log('[DEBUG] Restoring search input functionality');
+        
+        // Remove any blocking attributes and styles
         searchInput.disabled = false;
         searchInput.readOnly = false;
         searchInput.removeAttribute('disabled');
         searchInput.removeAttribute('readonly');
         
-        // Re-initialize event listeners
-        this.initializeSearchInput();
+        // Fix any style issues that might block interaction
+        searchInput.style.pointerEvents = 'auto';
+        searchInput.style.userSelect = 'text';
+        searchInput.style.zIndex = 'auto';
+        searchInput.style.position = 'static';
+        searchInput.tabIndex = 0;
         
-        // Try to restore focus if nothing else has focus
-        if (document.activeElement === document.body) {
-            searchInput.focus();
-        }
+        // Clear any existing event listeners that might interfere
+        const currentValue = searchInput.value;
+        const newInput = searchInput.cloneNode(true);
+        newInput.value = currentValue;
+        searchInput.parentNode.replaceChild(newInput, searchInput);
         
-        console.log('[DEBUG] Search input functionality restored');
+        // Re-initialize event listeners on the new element
+        setTimeout(() => {
+            this.initializeSearchInput();
+            console.log('[DEBUG] Search input event listeners re-initialized');
+        }, 10);
+        
+        // Ensure the input is focusable and working
+        setTimeout(() => {
+            const input = document.getElementById('librarySearchInput');
+            if (input) {
+                input.focus();
+                input.blur(); // Quick focus cycle to ensure it's active
+                console.log('[DEBUG] Search input focus cycle completed');
+            }
+        }, 50);
     }
 
     /**

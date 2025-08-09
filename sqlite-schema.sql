@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS songs (
     bass_tab_verified BOOLEAN DEFAULT 0,
     lyrics_url TEXT,
     lyrics_verified BOOLEAN DEFAULT 0,
-    album TEXT
+    album TEXT,
+    is_removed BOOLEAN DEFAULT 0
 );
 
 -- Scan directories table
@@ -51,6 +52,25 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Set Lists table
+CREATE TABLE IF NOT EXISTS setlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Song-Setlist junction table (many-to-many relationship)
+CREATE TABLE IF NOT EXISTS song_setlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    song_id INTEGER NOT NULL,
+    setlist_id INTEGER NOT NULL,
+    added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE,
+    FOREIGN KEY (setlist_id) REFERENCES setlists(id) ON DELETE CASCADE,
+    UNIQUE(song_id, setlist_id)
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title);
 CREATE INDEX IF NOT EXISTS idx_songs_artist ON songs(artist);
@@ -58,8 +78,11 @@ CREATE INDEX IF NOT EXISTS idx_songs_file_path ON songs(file_path);
 CREATE INDEX IF NOT EXISTS idx_songs_extracted_title ON songs(extracted_title);
 CREATE INDEX IF NOT EXISTS idx_songs_extracted_artist ON songs(extracted_artist);
 CREATE INDEX IF NOT EXISTS idx_songs_created_at ON songs(created_at);
+CREATE INDEX IF NOT EXISTS idx_songs_is_removed ON songs(is_removed);
 CREATE INDEX IF NOT EXISTS idx_scan_directories_path ON scan_directories(path);
 CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(key);
+CREATE INDEX IF NOT EXISTS idx_song_setlists_song_id ON song_setlists(song_id);
+CREATE INDEX IF NOT EXISTS idx_song_setlists_setlist_id ON song_setlists(setlist_id);
 
 -- Initialize default app settings
 INSERT OR IGNORE INTO app_settings (key, value) VALUES 

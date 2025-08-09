@@ -3,9 +3,9 @@ echo Creating Jamber3 Desktop Shortcut...
 
 set "SHORTCUT_NAME=Jamber3 Music Library"
 set "TARGET_PATH=C:\Windows\System32\cmd.exe"
-set "ARGUMENTS=/c ""cd /d C:\git\PlayMyLibrary && npm start"""
-set "WORKING_DIR=C:\git\PlayMyLibrary"
-set "ICON_PATH=C:\git\PlayMyLibrary\assets\icon.ico"
+set "ARGUMENTS=/c ""cd /d C:\git\Jamber3 && npm start"""
+set "WORKING_DIR=C:\git\Jamber3"
+set "ICON_PATH=C:\git\Jamber3\assets\icon.ico"
 set "DESKTOP=%USERPROFILE%\Desktop"
 
 :: Create PowerShell script to create the shortcut

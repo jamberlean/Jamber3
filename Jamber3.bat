@@ -3,7 +3,7 @@ title Jamber3 Music Library
 echo Starting Jamber3 Music Library...
 echo.
 
-cd /d "C:\git\PlayMyLibrary"
+cd /d "C:\git\Jamber3"
 npm start
 
 echo.

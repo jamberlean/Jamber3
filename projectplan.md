@@ -1,3 +1,335 @@
+# Setlist Feature Implementation Plan
+
+## Overview
+Add comprehensive Setlist functionality to allow users to organize songs into custom groups/playlists. Users can create, manage, and filter by setlists through both the Settings page and Song Details page.
+
+## Database Changes
+
+### 1. New Setlists Table
+```sql
+CREATE TABLE IF NOT EXISTS setlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 2. Junction Table for Song-Setlist Relationships
+Create proper many-to-many relationship table:
+```sql
+CREATE TABLE IF NOT EXISTS song_setlists (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    song_id INTEGER NOT NULL,
+    setlist_id INTEGER NOT NULL,
+    added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE,
+    FOREIGN KEY (setlist_id) REFERENCES setlists(id) ON DELETE CASCADE,
+    UNIQUE(song_id, setlist_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_song_setlists_song_id ON song_setlists(song_id);
+CREATE INDEX IF NOT EXISTS idx_song_setlists_setlist_id ON song_setlists(setlist_id);
+```
+- Clean many-to-many relationship design
+- Proper foreign key constraints with cascade deletes
+- Prevents duplicate song-setlist combinations
+- Indexed for fast lookups
+
+### 3. Database Service Methods
+Add methods to `database-service.js`:
+- `createSetlist(name, description)` - Create new setlist
+- `deleteSetlist(id)` - Delete setlist (cascade removes relationships)  
+- `getAllSetlists()` - Get all setlists with song counts
+- `addSongToSetlist(songId, setlistId)` - Insert into junction table
+- `removeSongFromSetlist(songId, setlistId)` - Remove from junction table
+- `getSongsInSetlist(setlistId)` - JOIN query to get songs
+- `getSetlistsForSong(songId)` - JOIN query to get setlists
+- `getSetlistWithSongCount(setlistId)` - Get setlist info with song count
+
+**Why Junction Table vs. Comma-Separated:**
+✅ **Advantages:**
+- Proper relational design with referential integrity
+- Fast JOINs with indexed lookups  
+- Atomic operations (no string parsing/manipulation)
+- Cascade deletes handle cleanup automatically
+- No risk of malformed comma-separated data
+- Can easily add metadata (like `added_at` timestamp)
+- Scales well to hundreds of setlists/songs
+
+❌ **Comma-separated drawbacks:**
+- String parsing required for every operation
+- No referential integrity 
+- Risk of malformed data ("1,2,,3" or trailing commas)
+- Difficult to maintain/debug
+- Poor SQL performance (can't use indexes effectively)
+
+## UI Changes
+
+### 1. Search/Filter Area (index.html)
+**Current:**
+```html
+<div class="filter-controls">
+    <label class="filter-checkbox">
+        <input type="checkbox" id="resourceFilter">
+        <span class="checkmark"></span>
+        Show only songs with resources
+    </label>
+</div>
+```
+
+**Updated:**
+```html
+<div class="filter-controls">
+    <div class="filter-row">
+        <label>Setlist:</label>
+        <select id="setlistFilter" class="setlist-dropdown">
+            <option value="">- none selected -</option>
+        </select>
+    </div>
+    <div class="filter-row">
+        <label class="filter-checkbox">
+            <input type="checkbox" id="resourceFilter">
+            <span class="checkmark"></span>
+            Show all songs with resources
+        </label>
+    </div>
+</div>
+```
+
+### 2. Settings Page (jamber3-app.js)
+Add new section at top of settings modal:
+```html
+<div class="settings-section">
+    <h3>Setlists</h3>
+    <p class="settings-description">Organize songs into custom groups and playlists:</p>
+    <div class="path-list" id="setListsList">
+        <!-- Dynamic setlist items here -->
+    </div>
+    <button class="btn secondary" id="addNewSetList">Add New Setlist</button>
+</div>
+```
+
+### 3. Song Details Page (song-details.js)
+**Add to Resources section:**
+```html
+<div class="resource-actions">
+    <button class="resource-btn" data-action="add-to-setlist">
+        <span>📋</span> Add To Setlist
+    </button>
+    <select id="setlistSelection" class="setlist-dropdown">
+        <option value="">- none selected -</option>
+    </select>
+</div>
+```
+
+**Add new section before Actions:**
+```html
+<div class="setlist-section" id="songSetlists" style="display: none;">
+    <h4>Setlists</h4>
+    <div class="setlist-memberships">
+        <!-- Dynamic setlist membership rows -->
+    </div>
+</div>
+```
+
+## Implementation Steps
+
+### Phase 1: Database Foundation
+1. **Update sqlite-schema.sql** - Add setlists table
+2. **Update database-service.js** - Add migration for setlist_ids column
+3. **Add SetList CRUD methods** - Create, Read, Update, Delete operations
+4. **Add Song-SetList relationship methods** - Link/unlink operations
+
+### Phase 2: Backend API
+1. **Server endpoints** (`server.js`):
+   - `GET /api/setlists` - Get all setlists
+   - `POST /api/setlists` - Create new setlist
+   - `DELETE /api/setlists/:id` - Delete setlist
+   - `POST /api/songs/:id/setlists` - Add song to setlist
+   - `DELETE /api/songs/:id/setlists/:setlistId` - Remove song from setlist
+   - `GET /api/setlists/:id/songs` - Get songs in setlist
+
+### Phase 3: Settings UI
+1. **Update createSettingsModal()** - Add SetLists section at top
+2. **Add setlist management methods**:
+   - `showAddSetListDialog()` - Modal for creating new setlist
+   - `addSetList(name, description)` - Server call to create
+   - `removeSetList(setlistId)` - Server call with confirmation
+   - `refreshSetListsList()` - Update UI after changes
+
+### Phase 4: Search/Filter UI
+1. **Update index.html** - Add setlist dropdown and rename checkbox
+2. **Update song-explorer.js**:
+   - `initializeSetlistFilter()` - Setup dropdown with available setlists
+   - `handleSetlistFilter(setlistId)` - Filter songs by setlist
+   - `loadSetlistsIntoDropdown()` - Populate dropdown options
+   - **Update `applyFilters()` to combine ALL filters**:
+     - Setlist filter (if selected)
+     - Search text filter (librarySearchInput)  
+     - Resource filter (checkbox)
+     - Apply all filters simultaneously with AND logic
+
+### Phase 5: Song Details UI
+1. **Update renderResources()** - Add "Add To Setlist" button and dropdown
+2. **Add renderSetListMemberships()** - Show current setlist memberships
+3. **Add setlist management methods**:
+   - `handleAddToSetlist(setlistId)` - Add current song to setlist
+   - `handleRemoveFromSetlist(setlistId)` - Remove from setlist
+   - `refreshSetlistMemberships()` - Update display after changes
+
+### Phase 6: Integration & Polish
+1. **Update loadSongs()** - Include setlist data
+2. **Add CSS styles** - Consistent styling for all new elements
+3. **Error handling** - Proper user feedback for all operations
+4. **Testing** - Comprehensive testing of all features
+
+## Filter Integration Logic
+
+The setlist filter must work in combination with existing filters using AND logic:
+
+### Current Filter System (song-explorer.js):
+```javascript
+applyFilters() {
+    let filtered = [...this.songs];
+    
+    // Apply search filter
+    if (this.searchQuery !== '') {
+        filtered = filtered.filter(song => /* search logic */);
+    }
+    
+    // Apply resource filter  
+    if (this.resourceFilter) {
+        filtered = filtered.filter(song => /* resource logic */);
+    }
+    
+    this.filteredSongs = filtered;
+}
+```
+
+### Enhanced Filter System:
+```javascript
+applyFilters() {
+    let filtered = [...this.songs];
+    
+    // Apply setlist filter FIRST (most selective)
+    if (this.selectedSetlistId) {
+        filtered = filtered.filter(song => 
+            song.setlists && song.setlists.includes(this.selectedSetlistId)
+        );
+    }
+    
+    // Apply search filter
+    if (this.searchQuery !== '') {
+        filtered = filtered.filter(song => 
+            song.title.toLowerCase().includes(this.searchQuery) ||
+            song.artist.toLowerCase().includes(this.searchQuery) ||
+            song.album.toLowerCase().includes(this.searchQuery)
+        );
+    }
+    
+    // Apply resource filter
+    if (this.resourceFilter) {
+        filtered = filtered.filter(song => 
+            song.guitar_tab_url || song.bass_tab_url || song.lyrics_url || song.lyrics_content
+        );
+    }
+    
+    this.filteredSongs = filtered;
+}
+```
+
+### Filter State Management:
+- Add `this.selectedSetlistId = null` to SongExplorer constructor
+- Update `handleSetlistFilter(setlistId)` to set state and call `applyFilters()`
+- Ensure filter state persists during song loading and view changes
+- Clear setlist filter when "- none selected -" is chosen
+
+### User Experience Examples:
+1. **Setlist + Search**: Select "Rock Songs" setlist, type "love" → shows only songs in Rock Songs that contain "love"
+2. **Setlist + Resources**: Select "Practice List" setlist, check resources → shows only Practice List songs that have tabs/lyrics  
+3. **All Three**: Select setlist, type search, check resources → shows intersection of all three filters
+4. **Clear Filters**: Selecting "- none selected -" clears setlist filter but preserves others
+
+## CSS Requirements
+Add styles to `styles.css`:
+```css
+.filter-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.setlist-dropdown {
+    margin-left: 10px;
+    padding: 5px 10px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+.setlist-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 5px;
+}
+
+.setlist-memberships {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.setlist-membership-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+}
+```
+
+## Questions for Clarification
+
+### 1. Setlist Creation Dialog
+**Question:** Should the "Add New Setlist" dialog include both name and description fields, or just name? Should description be optional?
+
+**Assumption:** Name is required, description is optional.
+
+### 2. Setlist Deletion Behavior
+**Question:** When a setlist is deleted, should the songs remain in the library (just remove setlist references) or should there be an option to also delete the songs?
+
+**Assumption:** Songs remain in library, only setlist references are removed.
+
+### 3. Duplicate Setlist Names
+**Question:** Should setlist names be unique? What should happen if user tries to create a setlist with an existing name?
+
+**Assumption:** Names must be unique, show error if duplicate attempted.
+
+### 4. Setlist Filtering Behavior
+**Question:** When a setlist is selected in the filter dropdown, should it show ONLY songs in that setlist, or should it highlight/prioritize them while still showing others?
+
+**Assumption:** Show ONLY songs in the selected setlist (exclusive filter).
+
+### 5. Adding Songs to Multiple Setlists
+**Question:** Can a song belong to multiple setlists simultaneously? The comma-separated approach suggests yes, but want to confirm.
+
+**Assumption:** Yes, songs can belong to multiple setlists.
+
+### 6. Setlist Display Order
+**Question:** How should setlists be ordered in dropdowns and lists? Alphabetical, creation date, or user-defined order?
+
+**Assumption:** Alphabetical order by name.
+
+### 7. Empty Setlist Handling
+**Question:** Should empty setlists be displayed in filter dropdowns? Should there be a way to view/manage empty setlists?
+
+**Assumption:** Empty setlists appear in dropdowns and can be managed in settings.
+
+---
+
 # Bug Fix: Song Click Crash After Filtering
 
 ## Problem
@@ -1180,7 +1512,7 @@ The SQLite migration and read-only configuration implementation has been **succe
 
 **Database Migration:**
 - **From**: JSON file storage (songs.json)
-- **To**: SQLite database (tablary.db)
+- **To**: SQLite database (jamber3.db)
 - **Migration tool**: `full-migration.js` - successfully completed full data transfer
 - **Schema**: Complete SQLite schema with proper indexes for performance
 
@@ -2321,3 +2653,78 @@ previewResource(url) {
 - Streamlined result actions to just "View Website" button
 
 **Result**: Manual URL entry now works correctly and interface is cleaner
+
+---
+
+## ✅ IMPLEMENTATION COMPLETED
+
+### **Review Summary**
+**Date**: August 9, 2025  
+**Feature**: Comprehensive Setlist Implementation  
+**Status**: ✅ **COMPLETE** - All phases successfully implemented and tested
+
+### **What Was Delivered**
+
+#### **✅ Phase 1: Database Foundation**
+- Created `setlists` table with proper constraints and indexes
+- Created `song_setlists` junction table with foreign key relationships
+- Added complete CRUD methods to `database-service.js`
+- Implemented proper cascade deletes for data integrity
+
+#### **✅ Phase 2: Server API**
+- Built RESTful API endpoints for all setlist operations
+- Full error handling and validation
+- Supports creating, deleting, and managing setlists
+- Endpoints for adding/removing songs from setlists
+
+#### **✅ Phase 3: Settings UI**
+- Added "Setlists" section at top of Settings page
+- Modal dialog for creating new setlists with validation
+- Setlist deletion with confirmation dialogs
+- Real-time updates of setlist displays
+
+#### **✅ Phase 4: Search/Filter Integration**  
+- **Renamed** checkbox from "Show only songs with resources" → "Show all songs with resources"
+- **Added** setlist dropdown filter above resources checkbox
+- **Implemented** AND logic between setlist, search, and resource filters
+- **Dynamic** dropdown population with setlist names and song counts
+
+#### **✅ Phase 5: Song Details Integration**
+- **Added** "Add To Setlist" dropdown with available setlists  
+- **Added** section showing current setlist memberships with removal buttons
+- **Smart filtering** - dropdown only shows setlists song isn't already in
+- **Full functionality** for adding/removing songs from setlists
+
+#### **✅ Phase 6: Styling & Polish**
+- Complete CSS styling for all new UI components
+- Full dark theme support for all setlist elements
+- Responsive design and proper visual hierarchy
+- Successfully tested - application runs without errors
+
+### **Critical Bug Fixed**
+**Issue**: Setlist modal input fields became unresponsive on second opening  
+**Root Cause**: Accumulating event handlers causing input blocking  
+**Solution**: Implemented proper event handler cleanup pattern:
+- Store all event handlers with references for proper removal
+- Clean up document-level keydown listeners on modal close
+- Prevent multiple modal instances from being created
+- Added event propagation controls to prevent handler conflicts
+
+**Files Modified**: `jamber3-app.js` - `createSetListInputModal()` and `closeSetListInputModal()`
+
+### **Technical Achievement**
+- **Database Design**: Proper many-to-many relationship with junction table
+- **Filter Integration**: Complex AND logic combining multiple filter types
+- **Event Management**: Solved recurring event handler accumulation issues  
+- **User Experience**: Intuitive interface following existing app patterns
+- **Code Quality**: Comprehensive error handling and validation throughout
+
+### **User Stories Completed**
+✅ Users can create and manage custom Setlists  
+✅ Users can organize songs into multiple Setlists  
+✅ Users can filter their library by Setlist  
+✅ Filter works seamlessly with existing search and resource filters  
+✅ Users can easily add/remove songs from Setlists via Song Details  
+✅ Interface is fully responsive with dark theme support  
+
+**The Setlist feature is now fully functional and ready for production use!** 🎉
