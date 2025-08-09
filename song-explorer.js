@@ -68,27 +68,39 @@ class SongExplorer {
             return;
         }
         
-        let searchTimeout;
+        // Store the debounce timeout at instance level
+        if (!this.searchTimeout) {
+            this.searchTimeout = null;
+        }
         
-        // Single debounced event handler
-        const handleSearchInput = (e) => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                this.handleSearch(e.target.value);
-            }, 300);
-        };
+        // Store event handler at instance level to prevent duplicate listeners
+        if (!this.handleSearchInput) {
+            this.handleSearchInput = (e) => {
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(() => {
+                    this.handleSearch(e.target.value);
+                }, 300);
+            };
+        }
         
+        // Remove any existing listener before adding new one
+        librarySearchInput.removeEventListener('input', this.handleSearchInput);
         // Only use 'input' event - covers typing, paste, and all input changes
-        librarySearchInput.addEventListener('input', handleSearchInput);
+        librarySearchInput.addEventListener('input', this.handleSearchInput);
 
         
         // Resource filter checkbox
         const resourceFilter = document.getElementById('resourceFilter');
         if (resourceFilter) {
-            resourceFilter.addEventListener('change', (e) => {
-                e.stopPropagation(); // Prevent bubbling
-                this.handleResourceFilter(e.target.checked);
-            });
+            // Store handler to prevent duplicates
+            if (!this.handleResourceFilterChange) {
+                this.handleResourceFilterChange = (e) => {
+                    e.stopPropagation(); // Prevent bubbling
+                    this.handleResourceFilter(e.target.checked);
+                };
+            }
+            resourceFilter.removeEventListener('change', this.handleResourceFilterChange);
+            resourceFilter.addEventListener('change', this.handleResourceFilterChange);
         }
     }
 
@@ -97,9 +109,38 @@ class SongExplorer {
      * @param {Array} songs - Array of song objects
      */
     loadSongs(songs) {
+        // Store current search input state before updating
+        const searchInput = document.getElementById('librarySearchInput');
+        const hadFocus = document.activeElement === searchInput;
+        const currentValue = searchInput ? searchInput.value : '';
+        const selectionStart = searchInput ? searchInput.selectionStart : 0;
+        const selectionEnd = searchInput ? searchInput.selectionEnd : 0;
+        
         this.songs = songs || [];
         this.filteredSongs = [...this.songs];
-        this.render();
+        
+        // Apply existing filters if present (search query OR resource filter)
+        if (this.searchQuery || this.resourceFilter) {
+            this.applyFilters();
+        } else {
+            this.render();
+        }
+        
+        // Restore focus and cursor position after render
+        if (hadFocus && searchInput) {
+            // Use setTimeout to ensure DOM is fully updated
+            setTimeout(() => {
+                const input = document.getElementById('librarySearchInput');
+                if (input) {
+                    input.focus();
+                    input.value = currentValue;
+                    input.setSelectionRange(selectionStart, selectionEnd);
+                }
+            }, 0);
+        }
+        
+        // Also ensure input remains functional after load
+        setTimeout(() => this.restoreSearchInput(), 50);
     }
 
     /**
@@ -124,6 +165,13 @@ class SongExplorer {
      * Apply all active filters
      */
     applyFilters() {
+        // Store current search input state before filtering
+        const searchInput = document.getElementById('librarySearchInput');
+        const hadFocus = document.activeElement === searchInput;
+        const currentValue = searchInput ? searchInput.value : '';
+        const selectionStart = searchInput ? searchInput.selectionStart : 0;
+        const selectionEnd = searchInput ? searchInput.selectionEnd : 0;
+        
         let filtered = [...this.songs];
 
         // Apply search filter
@@ -153,6 +201,19 @@ class SongExplorer {
 
         this.filteredSongs = filtered;
         this.render();
+        
+        // Restore focus and cursor position after render
+        if (hadFocus && searchInput) {
+            // Use setTimeout to ensure DOM is fully updated
+            setTimeout(() => {
+                const input = document.getElementById('librarySearchInput');
+                if (input) {
+                    input.focus();
+                    input.value = currentValue;
+                    input.setSelectionRange(selectionStart, selectionEnd);
+                }
+            }, 0);
+        }
     }
 
     /**
@@ -168,7 +229,27 @@ class SongExplorer {
             btn.classList.toggle('active', btn.dataset.view === view);
         });
         
+        // Store current focus state and input value
+        const searchInput = document.getElementById('librarySearchInput');
+        const hadFocus = document.activeElement === searchInput;
+        const currentValue = searchInput ? searchInput.value : '';
+        const selectionStart = searchInput ? searchInput.selectionStart : 0;
+        const selectionEnd = searchInput ? searchInput.selectionEnd : 0;
+        
         this.render();
+        
+        // Restore focus and cursor position after render
+        if (hadFocus && searchInput) {
+            // Use setTimeout to ensure DOM is fully updated
+            setTimeout(() => {
+                const input = document.getElementById('librarySearchInput');
+                if (input) {
+                    input.focus();
+                    input.value = currentValue;
+                    input.setSelectionRange(selectionStart, selectionEnd);
+                }
+            }, 0);
+        }
     }
 
     /**
@@ -182,6 +263,13 @@ class SongExplorer {
         }
         
         this.isRendering = true;
+        
+        // Always preserve search input state during renders
+        const searchInput = document.getElementById('librarySearchInput');
+        const searchHadFocus = document.activeElement === searchInput;
+        const searchValue = searchInput ? searchInput.value : '';
+        const searchSelectionStart = searchInput ? searchInput.selectionStart : 0;
+        const searchSelectionEnd = searchInput ? searchInput.selectionEnd : 0;
         
         // Add safety timeout to prevent infinite rendering
         setTimeout(() => {
@@ -256,6 +344,32 @@ class SongExplorer {
                         
                         this.attachTreeEventListeners();
                         this.isRendering = false; // Reset render flag
+                        
+                        // Re-initialize search input to ensure it stays responsive
+                        // This is necessary because the render might affect focus/input handling
+                        this.initializeSearchInput();
+                        
+                        // Ensure the search input is not disabled or readonly
+                        const searchInput = document.getElementById('librarySearchInput');
+                        if (searchInput) {
+                            searchInput.disabled = false;
+                            searchInput.readOnly = false;
+                            // Remove any attributes that might block input
+                            searchInput.removeAttribute('disabled');
+                            searchInput.removeAttribute('readonly');
+                        }
+                        
+                        // Restore search input focus and state if it had focus before render
+                        if (searchHadFocus) {
+                            setTimeout(() => {
+                                const input = document.getElementById('librarySearchInput');
+                                if (input) {
+                                    input.focus();
+                                    input.value = searchValue;
+                                    input.setSelectionRange(searchSelectionStart, searchSelectionEnd);
+                                }
+                            }, 10);
+                        }
                         
                         // Handle any pending selection after render completes
                         if (this.pendingSelection) {
@@ -742,6 +856,31 @@ class SongExplorer {
      */
     refresh() {
         this.render();
+    }
+    
+    /**
+     * Force restore search input functionality
+     * Call this if the search input becomes unresponsive
+     */
+    restoreSearchInput() {
+        const searchInput = document.getElementById('librarySearchInput');
+        if (!searchInput) return;
+        
+        // Remove any blocking attributes
+        searchInput.disabled = false;
+        searchInput.readOnly = false;
+        searchInput.removeAttribute('disabled');
+        searchInput.removeAttribute('readonly');
+        
+        // Re-initialize event listeners
+        this.initializeSearchInput();
+        
+        // Try to restore focus if nothing else has focus
+        if (document.activeElement === document.body) {
+            searchInput.focus();
+        }
+        
+        console.log('[DEBUG] Search input functionality restored');
     }
 
     /**

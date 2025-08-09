@@ -135,10 +135,10 @@ class ResourceReview {
         const saveBtn = modal.querySelector('.save-manual-btn');
         const urlInput = modal.querySelector('.manual-url-input');
         
-        saveBtn.addEventListener('click', () => {
+        saveBtn.addEventListener('click', async () => {
             const url = urlInput.value.trim();
             if (url) {
-                this.saveManualResource(resourceType, url);
+                await this.saveManualResource(resourceType, url);
                 this.closeModal(modal);
             }
         });

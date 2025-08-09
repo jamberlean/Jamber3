@@ -309,11 +309,11 @@ class SongDetails {
                 const statusClass = resource.verified ? 'verified' : 'pending';
                 const statusIcon = resource.verified ? '✓' : '⏳';
                 return `
-                    <a href="${this.escapeHtml(resource.url)}" target="_blank" class="resource-link ${statusClass}">
+                    <button class="resource-link ${statusClass}" data-resource="${resource.type}" data-action="view" data-url="${this.escapeHtml(resource.url)}">
                         <span>${resource.icon}</span>
                         <span>${resource.label}</span>
                         <span class="status">${statusIcon}</span>
-                    </a>
+                    </button>
                 `;
             } else {
                 return `
@@ -424,10 +424,10 @@ class SongDetails {
         // Resource find buttons
         const resourceButtons = this.container.querySelectorAll('[data-resource]');
         resourceButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (event) => {
                 const resourceType = btn.dataset.resource;
                 const action = btn.dataset.action;
-                this.handleFindResource(resourceType, action);
+                this.handleFindResource(resourceType, action, event);
             });
         });
 
@@ -491,12 +491,19 @@ class SongDetails {
      * Handle find resource requests
      * @param {string} resourceType - Type of resource to find
      */
-    handleFindResource(resourceType, action = 'find') {
+    handleFindResource(resourceType, action = 'find', event) {
         if (!this.currentSong) return;
 
         let eventType;
         
-        if (action === 'show' && resourceType === 'lyrics') {
+        if (action === 'view') {
+            // View existing resource URL in modal
+            const btn = event.target.closest('[data-url]');
+            if (btn && btn.dataset.url) {
+                this.showUrlInModal(btn.dataset.url, resourceType);
+                return;
+            }
+        } else if (action === 'show' && resourceType === 'lyrics') {
             // Show existing lyrics content
             eventType = 'showLyrics';
         } else {
@@ -513,13 +520,13 @@ class SongDetails {
             }
         }
 
-        const event = new CustomEvent(eventType, {
+        const customEvent = new CustomEvent(eventType, {
             detail: {
                 song: this.currentSong,
                 resourceType: resourceType
             }
         });
-        document.dispatchEvent(event);
+        document.dispatchEvent(customEvent);
     }
 
     /**
@@ -615,6 +622,7 @@ class SongDetails {
                         
                         <!-- Pitch Controls -->
                         <div class="control-group pitch-group">
+                            <div class="experimental-label" style="font-style: italic; font-size: 0.85em; color: #6c757d; margin-bottom: 4px;">Experimental</div>
                             <label class="control-label">Pitch</label>
                             <div class="slider-section">
                                 <span class="control-icon">🎼</span>
@@ -932,6 +940,197 @@ class SongDetails {
             detail: { song: this.currentSong }
         });
         document.dispatchEvent(event);
+    }
+
+    /**
+     * Show URL in modal
+     */
+    showUrlInModal(url, resourceType) {
+        // Check if this is a known problematic domain that blocks iframe embedding
+        const blockedDomains = [
+            'ultimate-guitar.com',
+            'songsterr.com',
+            '911tabs.com',
+            'tabs.ultimate-guitar.com'
+        ];
+        
+        const urlDomain = new URL(url).hostname.toLowerCase();
+        const isBlockedDomain = blockedDomains.some(domain => urlDomain.includes(domain));
+        
+        if (isBlockedDomain) {
+            // For known blocked domains, open directly in new tab
+            if (typeof require !== 'undefined') {
+                try {
+                    const { shell } = require('electron');
+                    shell.openExternal(url);
+                } catch (e) {
+                    window.open(url, '_blank');
+                }
+            } else {
+                window.open(url, '_blank');
+            }
+            return;
+        }
+        
+        // Create modal overlay for other sites
+        const overlay = document.createElement('div');
+        overlay.className = 'modal resource-display-modal';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        `;
+        
+        // Create modal content
+        const modal = document.createElement('div');
+        modal.className = 'modal-content';
+        modal.style.cssText = `
+            background: white;
+            padding: 0;
+            border-radius: 8px;
+            width: 95vw;
+            max-width: 1600px;
+            height: 90vh;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        `;
+        
+        // Add dark theme support
+        if (document.body.classList.contains('dark-theme')) {
+            modal.style.background = '#2d3748';
+            modal.style.color = '#e2e8f0';
+        }
+        
+        // Create header
+        const header = document.createElement('div');
+        header.style.cssText = `
+            padding: 15px 20px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        `;
+        
+        const title = document.createElement('h2');
+        title.textContent = `${resourceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} - ${this.currentSong.title}`;
+        title.style.margin = '0';
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(overlay);
+        });
+        
+        // Create iframe with error handling
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.style.cssText = `
+            width: 100%;
+            height: 100%;
+            border: none;
+            flex: 1;
+        `;
+        
+        // Create error message container
+        const errorContainer = document.createElement('div');
+        errorContainer.style.cssText = `
+            display: none;
+            flex: 1;
+            padding: 40px;
+            text-align: center;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+        `;
+        
+        const errorMessage = document.createElement('div');
+        errorMessage.innerHTML = `
+            <h3>Unable to display content in frame</h3>
+            <p>This website prevents embedding in frames for security reasons.</p>
+            <button onclick="window.open('${url}', '_blank')" style="
+                background: #007bff;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            ">Open in New Tab</button>
+        `;
+        errorContainer.appendChild(errorMessage);
+        
+        // Handle iframe load events
+        iframe.addEventListener('load', () => {
+            // Iframe loaded successfully - check after a short delay if content is blocked
+            setTimeout(() => {
+                try {
+                    // Try to detect if the iframe was redirected to about:blank or similar
+                    const currentSrc = iframe.contentWindow.location.href;
+                    if (currentSrc === 'about:blank' || currentSrc.includes('blocked') || currentSrc === '') {
+                        iframe.style.display = 'none';
+                        errorContainer.style.display = 'flex';
+                    }
+                } catch (e) {
+                    // Cross-origin restriction - this is normal and means the site loaded
+                    // Leave iframe visible as the content should be displaying
+                }
+            }, 1000);
+        });
+        
+        // Only handle actual network errors, not content blocking
+        iframe.addEventListener('error', () => {
+            // Only show error for actual loading failures, not content policy blocks
+            iframe.style.display = 'none';
+            errorContainer.style.display = 'flex';
+        });
+        
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+        modal.appendChild(iframe);
+        modal.appendChild(errorContainer);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        
+        // Allow closing with Escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                document.body.removeChild(overlay);
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+        
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                document.body.removeChild(overlay);
+                document.removeEventListener('keydown', handleEscape);
+            }
+        });
     }
 
     /**
