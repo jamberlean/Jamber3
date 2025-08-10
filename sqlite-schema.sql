@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS songs (
     lyrics_content TEXT,
     mp3_path TEXT,
     tablature_url TEXT,
-    tablature_content TEXT,
     youtube_url TEXT,
     created_at TEXT,
     file_path TEXT,

@@ -28,7 +28,7 @@ class Jamber3App {
             // Initialize event listeners
             this.initializeEventListeners();
             
-            console.log('Jamber3 initialized successfully');
+            // console.log('Jamber3 initialized successfully');
         } catch (error) {
             console.error('Error initializing Jamber3:', error);
             this.showError('Failed to initialize application');
@@ -129,7 +129,16 @@ class Jamber3App {
      * Refresh the setlist dropdown with updated data
      */
     async refreshSetlistDropdown() {
+        const inputBefore = document.getElementById('librarySearchInput');
+        const listenersBefore = inputBefore ? Object.keys(inputBefore).filter(key => key.startsWith('on')).length : 0;
+        
         await this.loadSetlists();
+        
+        const inputAfter = document.getElementById('librarySearchInput');
+        const listenersAfter = inputAfter ? Object.keys(inputAfter).filter(key => key.startsWith('on')).length : 0;
+        
+        if (listenersBefore > 0 && listenersAfter === 0) {
+        }
     }
 
     /**
@@ -152,11 +161,11 @@ class Jamber3App {
         if (!defaultOption) {
             defaultOption = document.createElement('option');
             defaultOption.value = '';
-            defaultOption.textContent = '- filter by setlist -';
+            defaultOption.textContent = '- setlist filter is off -';
             setlistFilter.insertBefore(defaultOption, setlistFilter.firstChild);
         } else {
             // Update text in case it changed
-            defaultOption.textContent = '- filter by setlist -';
+            defaultOption.textContent = '- setlist filter is off -';
         }
 
         // Add setlist options
@@ -211,7 +220,7 @@ class Jamber3App {
      * Start music scanning process
      */
     async startMusicScan() {
-        console.log('startMusicScan called');
+        // console.log('startMusicScan called');
         
         // Check if we're already scanning
         if (this.isScanning) {
@@ -278,7 +287,7 @@ class Jamber3App {
 
             if (allDirectories.length === 0) {
                 window.progressIndicator.hide('music-scan');
-                alert('No music directories found. You can add songs manually or configure custom directories in Settings.');
+                await customAlert('No music directories found. You can add songs manually or configure custom directories in Settings.', 'No Music Directories');
                 return;
             }
 
@@ -351,8 +360,7 @@ class Jamber3App {
                 // Ensure search input remains functional
                 setTimeout(() => {
                     if (window.songExplorer) {
-                        window.songExplorer.restoreSearchInput();
-                    }
+                        }
                 }, 200);
             }, 1500);
 
@@ -497,13 +505,7 @@ class Jamber3App {
      * Delete a song
      */
     async deleteSong(song) {
-        // Show confirmation dialog
-        const songDisplay = song.artist ? `"${song.title}" by ${song.artist}` : `"${song.title}"`;
-        const confirmed = confirm(`Are you sure you want to delete ${songDisplay}?\n\nThis action cannot be undone.`);
-        
-        if (!confirmed) {
-            return;
-        }
+        // Confirmation already handled in song-details.js
         
         try {
             const response = await fetch(`/api/songs/${song.id}`, {
@@ -533,7 +535,7 @@ class Jamber3App {
      */
     initializeKeyboardShortcuts() {
         const shortcuts = {
-            'F1': () => this.showHelp(),
+            'F1': async () => await this.showHelp(),
             'F5': () => this.loadSongs(),
             'F9': () => this.toggleTheme(),
             'Ctrl+S': () => this.startMusicScan(),
@@ -645,6 +647,7 @@ class Jamber3App {
      * Create and display the settings modal
      */
     createSettingsModal(config, setlists = []) {
+        
         // Remove existing modal if present
         const existingModal = document.getElementById('settingsModal');
         if (existingModal) {
@@ -831,6 +834,7 @@ class Jamber3App {
             modal.classList.remove('show');
             setTimeout(() => {
                 modal.remove();
+                // Ensure search input remains interactive when all modals are closed
             }, 300);
         }
     }
@@ -980,10 +984,12 @@ class Jamber3App {
                 this.closePathInputModal();
                 this.showMessage(result.message || `Successfully added "${newPath}" to ${type} paths.`, 'success');
                 
-                // Refresh the settings modal with updated config
-                setTimeout(() => {
-                    this.createSettingsModal(result.config);
-                }, 500);
+                // Refresh only the relevant path list using the updated config from server
+                if (type === 'enabled') {
+                    this.refreshEnabledPathsInModal(result.config);
+                } else if (type === 'excluded') {
+                    this.refreshExcludedPathsInModal(result.config);
+                }
             } else {
                 // Show error message
                 this.showPathValidationMessage(
@@ -1027,7 +1033,7 @@ class Jamber3App {
             confirmMessage += '\n\n⚠️ WARNING: All songs from this folder will be removed from your library!';
         }
 
-        const confirmed = confirm(confirmMessage);
+        const confirmed = await customConfirm(confirmMessage, 'Remove Path');
         if (!confirmed) {
             return;
         }
@@ -1052,10 +1058,12 @@ class Jamber3App {
                 // Success - show message and refresh settings modal
                 this.showMessage(result.message || `Successfully removed "${pathToRemove}" from ${type} paths.`, 'success');
                 
-                // Refresh the settings modal with updated config
-                setTimeout(() => {
-                    this.createSettingsModal(result.config);
-                }, 1000);
+                // Refresh only the relevant path list using the updated config from server
+                if (type === 'enabled') {
+                    this.refreshEnabledPathsInModal(result.config);
+                } else if (type === 'excluded') {
+                    this.refreshExcludedPathsInModal(result.config);
+                }
 
                 // Refresh the song list if songs were removed
                 if (result.removedSongs && result.removedSongs > 0) {
@@ -1130,7 +1138,7 @@ class Jamber3App {
 
         // Create fresh modal
         const modalHtml = `
-            <div id="setlistInputModal" class="modal-overlay">
+            <div id="setlistInputModal" class="modal-overlay" style="z-index: 1001;">
                 <div class="modal-content path-input-modal" onclick="event.stopPropagation()">
                     <div class="modal-header">
                         <h2>Add New Setlist</h2>
@@ -1201,13 +1209,7 @@ class Jamber3App {
                 nameInput.focus();
                 // Force cursor to appear
                 nameInput.click();
-                // Verify input is working by testing it
-                console.log('Input element state:', {
-                    disabled: nameInput.disabled,
-                    readOnly: nameInput.readOnly,
-                    tabIndex: nameInput.tabIndex,
-                    focused: document.activeElement === nameInput
-                });
+                // Focus the input for user convenience
             }, 100);
         }, 10);
     }
@@ -1239,6 +1241,7 @@ class Jamber3App {
                 if (modal.parentNode) {
                     modal.remove();
                 }
+                // Clean up any lingering interference after modal removal
             }, 300);
         }
     }
@@ -1276,24 +1279,8 @@ class Jamber3App {
                 // Success - close modal and refresh settings
                 this.closeSetListInputModal();
                 
-                // Refresh the settings modal and main dropdown
-                setTimeout(async () => {
-                    try {
-                        const configResponse = await fetch('/api/config');
-                        const setlistsResponse = await fetch('/api/setlists');
-                        
-                        if (configResponse.ok && setlistsResponse.ok) {
-                            const config = await configResponse.json();
-                            const setlists = await setlistsResponse.json();
-                            this.createSettingsModal(config, setlists);
-                            
-                            // Also refresh main dropdown
-                            this.populateSetlistDropdown(setlists);
-                        }
-                    } catch (error) {
-                        console.error('Error refreshing settings:', error);
-                    }
-                }, 500);
+                // Refresh just the setlist section and main dropdown
+                this.refreshSetlistsInModal();
             } else {
                 // Show error message
                 this.showSetListValidationMessage(
@@ -1315,7 +1302,10 @@ class Jamber3App {
         const setlistName = setlistItem.querySelector('.path-text strong').textContent;
 
         // Show confirmation dialog
-        const confirmed = confirm(`Are you sure you want to delete the setlist "${setlistName}"?\n\nThis will remove the setlist but songs will remain in your library.`);
+        const confirmed = await customConfirm(
+            `Are you sure you want to delete the setlist "${setlistName}"?\n\nThis will remove the setlist but songs will remain in your library.`,
+            'Delete Setlist'
+        );
         if (!confirmed) {
             return;
         }
@@ -1326,24 +1316,8 @@ class Jamber3App {
             });
 
             if (response.ok) {
-                // Refresh the settings modal and main dropdown
-                setTimeout(async () => {
-                    try {
-                        const configResponse = await fetch('/api/config');
-                        const setlistsResponse = await fetch('/api/setlists');
-                        
-                        if (configResponse.ok && setlistsResponse.ok) {
-                            const config = await configResponse.json();
-                            const setlists = await setlistsResponse.json();
-                            this.createSettingsModal(config, setlists);
-                            
-                            // Also refresh main dropdown
-                            this.populateSetlistDropdown(setlists);
-                        }
-                    } catch (error) {
-                        console.error('Error refreshing settings:', error);
-                    }
-                }, 1000);
+                // Refresh just the setlist section and main dropdown
+                this.refreshSetlistsInModal();
             } else {
                 const result = await response.json();
                 this.showError(result.error || 'Failed to delete setlist');
@@ -1351,6 +1325,96 @@ class Jamber3App {
         } catch (error) {
             console.error('Error deleting setlist:', error);
             this.showError('Network error: Could not delete setlist.');
+        }
+    }
+
+    /**
+     * Refresh only the setlists section in the settings modal (prevents screen flash)
+     */
+    async refreshSetlistsInModal() {
+        try {
+            const setlistsResponse = await fetch('/api/setlists');
+            if (setlistsResponse.ok) {
+                const setlists = await setlistsResponse.json();
+                
+                // Update the setlist list element directly
+                const setlistsList = document.getElementById('setListsList');
+                if (setlistsList) {
+                    // Re-render just the setlist items using the existing render method
+                    setlistsList.innerHTML = this.renderSetListsList(setlists);
+                    
+                    // Re-attach event listeners to new remove buttons
+                    const removeButtons = setlistsList.querySelectorAll('.remove-setlist');
+                    removeButtons.forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            e.preventDefault();
+                            const setlistItem = e.target.closest('.path-item');
+                            if (setlistItem) {
+                                await this.removeSetList(setlistItem);
+                            }
+                        });
+                    });
+                }
+                
+                // Also refresh the main app dropdown
+                this.populateSetlistDropdown(setlists);
+            }
+        } catch (error) {
+            console.error('Error refreshing setlists:', error);
+        }
+    }
+
+    /**
+     * Refresh enabled paths list in the settings modal
+     * @param {Object} config - Optional config object, if not provided will fetch from server
+     */
+    async refreshEnabledPathsInModal(config = null) {
+        try {
+            // Use provided config or fetch fresh data from server
+            if (!config) {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    config = await response.json();
+                } else {
+                    throw new Error('Failed to fetch config');
+                }
+            }
+            
+            const enabledPathsList = document.getElementById('enabledPathsList');
+            if (enabledPathsList) {
+                enabledPathsList.innerHTML = this.renderPathList(config.scan_directories?.enabled_paths || [], 'enabled');
+                // Re-attach event listeners for remove buttons
+                this.attachRemoveListeners(config);
+            }
+        } catch (error) {
+            console.error('Error refreshing enabled paths:', error);
+        }
+    }
+
+    /**
+     * Refresh excluded paths list in the settings modal
+     * @param {Object} config - Optional config object, if not provided will fetch from server
+     */
+    async refreshExcludedPathsInModal(config = null) {
+        try {
+            // Use provided config or fetch fresh data from server
+            if (!config) {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    config = await response.json();
+                } else {
+                    throw new Error('Failed to fetch config');
+                }
+            }
+            
+            const excludedPathsList = document.getElementById('excludedPathsList');
+            if (excludedPathsList) {
+                excludedPathsList.innerHTML = this.renderPathList(config.scan_directories?.excluded_paths || [], 'excluded');
+                // Re-attach event listeners for remove buttons
+                this.attachRemoveListeners(config);
+            }
+        } catch (error) {
+            console.error('Error refreshing excluded paths:', error);
         }
     }
 
@@ -1372,7 +1436,6 @@ class Jamber3App {
 
             if (response.ok) {
                 this.closeSettingsModal();
-                this.showMessage('Settings saved successfully!', 'success');
             } else {
                 throw new Error('Failed to save settings');
             }
@@ -1394,15 +1457,16 @@ class Jamber3App {
     /**
      * Show a message to the user
      */
-    showMessage(message, type = 'info') {
-        // Simple message display - could be enhanced with a proper toast system
-        alert(message);
+    async showMessage(message, type = 'info') {
+        // Simple message display - could be enhanced with a proper toast system  
+        // Don't await to allow sync callers - fire and forget
+        customAlert(message, 'Message').catch(console.error);
     }
 
     /**
      * Show help information
      */
-    showHelp() {
+    async showHelp() {
         const helpText = `
 Jamber3 - Guitar Song Library Help
 
@@ -1433,7 +1497,7 @@ FINDING RESOURCES:
 For more information, visit the Jamber3 documentation.
         `;
         
-        alert(helpText);
+        await customAlert(helpText, 'Help');
     }
 
     /**
@@ -1467,8 +1531,9 @@ For more information, visit the Jamber3 documentation.
     /**
      * Show error message
      */
-    showError(message) {
-        alert('Error: ' + message);
+    async showError(message) {
+        // Don't await to allow sync callers - fire and forget for errors
+        customAlert('Error: ' + message, 'Error').catch(console.error);
     }
     
     /**
@@ -1497,7 +1562,9 @@ For more information, visit the Jamber3 documentation.
             padding: 20px;
             border-radius: 8px;
             width: 450px;
-            height: 320px;
+            min-height: 320px;
+            max-height: 600px;
+            height: auto;
             display: flex;
             flex-direction: column;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -1560,22 +1627,6 @@ For more information, visit the Jamber3 documentation.
         
         button.addEventListener('click', () => {
             document.body.removeChild(overlay);
-            // Restore search input after modal closes with proper cleanup
-            setTimeout(() => {
-                if (window.songExplorer) {
-                    window.songExplorer.restoreSearchInput();
-                    // Force re-focus on search input if needed
-                    const searchInput = document.getElementById('librarySearchInput');
-                    if (searchInput) {
-                        searchInput.focus();
-                        searchInput.blur();
-                        // Re-enable all input capabilities
-                        searchInput.style.pointerEvents = 'auto';
-                        searchInput.style.zIndex = 'auto';
-                        searchInput.tabIndex = 0;
-                    }
-                }
-            }, 100);
         });
         
         buttonContainer.appendChild(button);
@@ -1588,8 +1639,7 @@ For more information, visit the Jamber3 documentation.
                 // Restore search input after modal closes with proper cleanup
                 setTimeout(() => {
                     if (window.songExplorer) {
-                        window.songExplorer.restoreSearchInput();
-                        // Force re-focus on search input if needed
+                            // Force re-focus on search input if needed
                         const searchInput = document.getElementById('librarySearchInput');
                         if (searchInput) {
                             searchInput.focus();
@@ -1636,4 +1686,5 @@ For more information, visit the Jamber3 documentation.
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.jamber3App = new Jamber3App();
+    
 });

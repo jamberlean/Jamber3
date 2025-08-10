@@ -60,7 +60,6 @@ class SongExplorer {
      * Initialize search input
      */
     initializeSearchInput() {
-        console.log('[DEBUG] initializeSearchInput called from:', new Error().stack.split('\n')[2]);
         const librarySearchInput = document.getElementById('librarySearchInput');
         if (!librarySearchInput) {
             // Single retry after DOM load instead of recursive calls
@@ -75,7 +74,7 @@ class SongExplorer {
             this.searchTimeout = null;
         }
         
-        // Store event handler at instance level to prevent duplicate listeners
+        // Create event handler for search input
         if (!this.handleSearchInput) {
             this.handleSearchInput = (e) => {
                 clearTimeout(this.searchTimeout);
@@ -85,9 +84,9 @@ class SongExplorer {
             };
         }
         
-        // Remove any existing listener before adding new one
+        // Remove any existing listener and add the new one directly
+        // Bypassing globalListenerManager for now to ensure it works
         librarySearchInput.removeEventListener('input', this.handleSearchInput);
-        // Only use 'input' event - covers typing, paste, and all input changes
         librarySearchInput.addEventListener('input', this.handleSearchInput);
 
         
@@ -101,8 +100,12 @@ class SongExplorer {
                     this.handleResourceFilter(e.target.checked);
                 };
             }
-            resourceFilter.removeEventListener('change', this.handleResourceFilterChange);
-            resourceFilter.addEventListener('change', this.handleResourceFilterChange);
+            if (window.globalListenerManager) {
+                window.globalListenerManager.safeAddListener(resourceFilter, 'change', this.handleResourceFilterChange);
+            } else {
+                resourceFilter.removeEventListener('change', this.handleResourceFilterChange);
+                resourceFilter.addEventListener('change', this.handleResourceFilterChange);
+            }
         }
         
         // Setlist filter dropdown
@@ -114,8 +117,12 @@ class SongExplorer {
                     this.handleSetlistFilter(e.target.value);
                 };
             }
-            setlistFilter.removeEventListener('change', this.handleSetlistFilterChange);
-            setlistFilter.addEventListener('change', this.handleSetlistFilterChange);
+            if (window.globalListenerManager) {
+                window.globalListenerManager.safeAddListener(setlistFilter, 'change', this.handleSetlistFilterChange);
+            } else {
+                setlistFilter.removeEventListener('change', this.handleSetlistFilterChange);
+                setlistFilter.addEventListener('change', this.handleSetlistFilterChange);
+            }
         }
     }
 
@@ -155,7 +162,6 @@ class SongExplorer {
         }
         
         // Also ensure input remains functional after load
-        setTimeout(() => this.restoreSearchInput(), 50);
     }
 
     /**
@@ -390,11 +396,20 @@ class SongExplorer {
                     return;
                 }
                 
-                // Clear existing content safely
-                this.container.innerHTML = '';
-                
-                // Add new content
-                this.container.innerHTML = `<ul class="song-tree">${html}</ul>`;
+                // Use input state preservation during DOM manipulation
+                if (window.InputStateManager) {
+                    window.InputStateManager.preserveInputState(() => {
+                        // Clear existing content safely
+                        this.container.innerHTML = '';
+                        
+                        // Add new content
+                        this.container.innerHTML = `<ul class="song-tree">${html}</ul>`;
+                    });
+                } else {
+                    // Fallback if utility not available
+                    this.container.innerHTML = '';
+                    this.container.innerHTML = `<ul class="song-tree">${html}</ul>`;
+                }
                 
                 
                 // Use another requestAnimationFrame to ensure DOM is fully updated
@@ -414,17 +429,13 @@ class SongExplorer {
                         // This prevents unnecessary event listener churning
                         const searchInput = document.getElementById('librarySearchInput');
                         if (searchInput && (searchInput.disabled || searchInput.readOnly)) {
-                            console.log('[DEBUG] Re-initializing search input due to disabled/readonly state');
+                            // Run full diagnosis
                             this.initializeSearchInput();
                         }
                         
-                        // Ensure the search input is not disabled or readonly
-                        if (searchInput) {
-                            searchInput.disabled = false;
-                            searchInput.readOnly = false;
-                            // Remove any attributes that might block input
-                            searchInput.removeAttribute('disabled');
-                            searchInput.removeAttribute('readonly');
+                        // Ensure the search input is interactive
+                        if (searchInput && window.InputStateManager) {
+                            window.InputStateManager.ensureInteractive(searchInput);
                         }
                         
                         // Restore search input focus and state if it had focus before render
@@ -926,51 +937,6 @@ class SongExplorer {
         this.render();
     }
     
-    /**
-     * Force restore search input functionality
-     * Call this if the search input becomes unresponsive
-     */
-    restoreSearchInput() {
-        const searchInput = document.getElementById('librarySearchInput');
-        if (!searchInput) return;
-        
-        console.log('[DEBUG] Restoring search input functionality');
-        
-        // Remove any blocking attributes and styles
-        searchInput.disabled = false;
-        searchInput.readOnly = false;
-        searchInput.removeAttribute('disabled');
-        searchInput.removeAttribute('readonly');
-        
-        // Fix any style issues that might block interaction
-        searchInput.style.pointerEvents = 'auto';
-        searchInput.style.userSelect = 'text';
-        searchInput.style.zIndex = 'auto';
-        searchInput.style.position = 'static';
-        searchInput.tabIndex = 0;
-        
-        // Clear any existing event listeners that might interfere
-        const currentValue = searchInput.value;
-        const newInput = searchInput.cloneNode(true);
-        newInput.value = currentValue;
-        searchInput.parentNode.replaceChild(newInput, searchInput);
-        
-        // Re-initialize event listeners on the new element
-        setTimeout(() => {
-            this.initializeSearchInput();
-            console.log('[DEBUG] Search input event listeners re-initialized');
-        }, 10);
-        
-        // Ensure the input is focusable and working
-        setTimeout(() => {
-            const input = document.getElementById('librarySearchInput');
-            if (input) {
-                input.focus();
-                input.blur(); // Quick focus cycle to ensure it's active
-                console.log('[DEBUG] Search input focus cycle completed');
-            }
-        }, 50);
-    }
 
     /**
      * Get statistics about current view

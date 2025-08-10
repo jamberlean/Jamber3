@@ -453,7 +453,7 @@ class ResourceReview {
 
             if (response.ok) {
                 const updatedSong = await response.json();
-                this.showSuccess('Resource added successfully!');
+                // this.showSuccess('Resource added successfully!'); // Removed - not needed
                 
                 // Refresh song details if visible
                 if (window.songDetails && window.songDetails.getCurrentSong()?.id === this.currentSong.id) {
@@ -505,20 +505,21 @@ class ResourceReview {
     /**
      * Show success message
      */
-    showSuccess(message) {
-        // Simple alert for now - could be replaced with toast notification
-        alert(message);
+    async showSuccess(message) {
+        // Simple alert for now - could be replaced with toast notification - fire and forget
+        customAlert(message, 'Success').catch(console.error);
     }
 
     /**
      * Show error message
      */
-    showError(modal, message) {
+    async showError(modal, message) {
         if (modal) {
             const container = modal.querySelector('.results-container');
             container.innerHTML = `<div class="error-state"><p class="error">${message}</p></div>`;
         } else {
-            alert(message);
+            // Fire and forget to allow sync callers
+            customAlert(message, 'Error').catch(console.error);
         }
     }
 

@@ -333,6 +333,7 @@ ipcMain.handle('open-file', async (event, filePath) => {
     }
 });
 
+
 // Handle app events
 app.whenReady().then(() => {
     createWindow();

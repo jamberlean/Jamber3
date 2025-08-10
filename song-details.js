@@ -18,7 +18,6 @@ class SongDetails {
     initializeEventListeners() {
         // Listen for song selection events
         document.addEventListener('songSelected', (e) => {
-            console.log('[DEBUG] songSelected event received, song:', e.detail?.song?.id, e.detail?.song?.title);
             try {
                 this.displaySong(e.detail.song);
             } catch (error) {
@@ -43,13 +42,12 @@ class SongDetails {
         try {
             // Don't re-render if it's the same song
             if (this.currentSong && this.currentSong.id === song.id) {
-                console.log('[DEBUG] Same song already displayed, skipping render');
+                // console.log('[DEBUG] Same song already displayed, skipping render');
                 return;
             }
             
             // Reset edit mode when switching to a different song
             if (this.isEditMode) {
-                console.log('[DEBUG] Resetting edit mode for new song selection');
                 this.isEditMode = false;
                 this.originalSongData = null;
             }
@@ -120,7 +118,14 @@ class SongDetails {
             </div>
         `;
         
-        this.container.innerHTML = html;
+        // Use input state preservation during DOM manipulation
+        if (window.InputStateManager) {
+            window.InputStateManager.preserveInputState(() => {
+                this.container.innerHTML = html;
+            });
+        } else {
+            this.container.innerHTML = html;
+        }
         this.attachEventListeners();
         
         // Load setlists for this song
@@ -157,7 +162,14 @@ class SongDetails {
             </div>
         `;
         
-        this.container.innerHTML = html;
+        // Use input state preservation during DOM manipulation
+        if (window.InputStateManager) {
+            window.InputStateManager.preserveInputState(() => {
+                this.container.innerHTML = html;
+            });
+        } else {
+            this.container.innerHTML = html;
+        }
         this.attachEventListeners();
     }
 
@@ -455,40 +467,64 @@ class SongDetails {
         // Remove existing event listeners by cloning and replacing elements
         this.removeExistingListeners();
         
-        // Action buttons
+        // Action buttons - use safe event listener management
         const actionButtons = this.container.querySelectorAll('[data-action]');
         actionButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
+            const handler = () => {
                 const action = btn.dataset.action;
                 this.handleAction(action);
-            });
+            };
+            
+            if (window.globalListenerManager) {
+                window.globalListenerManager.safeAddListener(btn, 'click', handler);
+            } else {
+                btn.addEventListener('click', handler);
+            }
         });
 
-        // Resource find buttons
+        // Resource find buttons - use safe event listener management
         const resourceButtons = this.container.querySelectorAll('[data-resource]');
         resourceButtons.forEach(btn => {
-            btn.addEventListener('click', (event) => {
+            const handler = (event) => {
                 const resourceType = btn.dataset.resource;
                 const action = btn.dataset.action;
                 this.handleFindResource(resourceType, action, event);
-            });
+            };
+            
+            if (window.globalListenerManager) {
+                window.globalListenerManager.safeAddListener(btn, 'click', handler);
+            } else {
+                btn.addEventListener('click', handler);
+            }
         });
 
-        // File path click
+        // File path click - use safe event listener management
         const filePaths = this.container.querySelectorAll('.file-path');
         filePaths.forEach(path => {
-            path.addEventListener('click', () => {
+            const handler = () => {
                 this.handleAction('locate');
-            });
+            };
+            
+            if (window.globalListenerManager) {
+                window.globalListenerManager.safeAddListener(path, 'click', handler);
+            } else {
+                path.addEventListener('click', handler);
+            }
             path.style.cursor = 'pointer';
         });
 
-        // Collapsible section headers
+        // Collapsible section headers - use safe event listener management
         const collapsibleHeaders = this.container.querySelectorAll('.collapsible-header');
         collapsibleHeaders.forEach(header => {
-            header.addEventListener('click', () => {
+            const handler = () => {
                 this.toggleCollapsibleSection(header);
-            });
+            };
+            
+            if (window.globalListenerManager) {
+                window.globalListenerManager.safeAddListener(header, 'click', handler);
+            } else {
+                header.addEventListener('click', handler);
+            }
         });
 
         // Setlist removal buttons
@@ -515,40 +551,29 @@ class SongDetails {
         try {
             const editInputs = this.container.querySelectorAll('input[type="text"], textarea');
             editInputs.forEach(input => {
-                // Prevent drag events from bubbling up and potentially interfering with window bounds saving
-                input.addEventListener('mousedown', (e) => {
-                    // Allow normal text selection but prevent interference with window management
-                    e.stopPropagation();
-                });
-
-                input.addEventListener('selectstart', (e) => {
-                    // Allow text selection but prevent bubbling
-                    e.stopPropagation();
-                });
-
-                input.addEventListener('dragstart', (e) => {
-                    // Prevent drag operations that might conflict with window bounds saving
-                    e.stopPropagation();
-                });
-
-                // Add error handling for any input focus/blur issues
-                input.addEventListener('focus', (e) => {
-                    try {
-                        // Safely handle focus events
+                // Use safer event handling that doesn't interfere with native input behavior
+                if (window.SafeEventHandling) {
+                    // Use safe mousedown handler that only stops propagation when necessary
+                    const safeMousedownHandler = window.SafeEventHandling.createSafeMousedownHandler();
+                    input.addEventListener('mousedown', safeMousedownHandler);
+                    
+                    // Use safe focus handler that preserves native browser behavior
+                    const safeFocusHandler = window.SafeEventHandling.createSafeFocusHandler();
+                    input.addEventListener('focus', safeFocusHandler);
+                    
+                    // Only prevent dragstart to avoid conflicts, but allow normal text selection
+                    input.addEventListener('dragstart', (e) => {
                         e.stopPropagation();
-                    } catch (error) {
-                        console.error('Error in input focus handler:', error);
-                    }
-                });
-
-                input.addEventListener('blur', (e) => {
-                    try {
-                        // Safely handle blur events
+                    });
+                    
+                    // Allow selectstart for text selection - don't interfere
+                    // Allow blur events to work normally - don't interfere
+                } else {
+                    // Fallback - minimal interference approach
+                    input.addEventListener('dragstart', (e) => {
                         e.stopPropagation();
-                    } catch (error) {
-                        console.error('Error in input blur handler:', error);
-                    }
-                });
+                    });
+                }
             });
         } catch (error) {
             console.error('Error attaching edit mode protections:', error);
@@ -559,12 +584,14 @@ class SongDetails {
      * Remove existing event listeners to prevent duplicates
      */
     removeExistingListeners() {
-        // For elements with event listeners, we replace them with clones to remove all listeners
-        const elementsWithListeners = this.container.querySelectorAll('[data-action], [data-resource], .file-path, .collapsible-header');
-        elementsWithListeners.forEach(element => {
-            const clone = element.cloneNode(true);
-            element.parentNode.replaceChild(clone, element);
-        });
+        // Use safe event listener management instead of DOM element replacement
+        if (window.globalListenerManager) {
+            const elementsWithListeners = this.container.querySelectorAll('[data-action], [data-resource], .file-path, .collapsible-header');
+            elementsWithListeners.forEach(element => {
+                window.globalListenerManager.removeAllListeners(element);
+            });
+        }
+        // If utility not available, skip listener removal to avoid breaking input fields
     }
 
     /**
@@ -792,12 +819,12 @@ class SongDetails {
             const songId = this.currentSong.id;
             const filePath = this.currentSong.file_path;
             
-            console.log('Initializing embedded audio player for song:', songId, filePath);
+            // console.log('Initializing embedded audio player for song:', songId, filePath);
             
             // Clean up any existing player more thoroughly
             try {
                 if (this.audioPlayer) {
-                    console.log('Cleaning up existing audio player');
+                    // console.log('Cleaning up existing audio player');
                     this.audioPlayer.destroy();
                     this.audioPlayer = null;
                 }
@@ -837,7 +864,7 @@ class SongDetails {
                     window.currentAudioPlayer = this.audioPlayer;
                 }, 10);
                 
-                console.log('Audio player created successfully for song:', songId);
+                // console.log('Audio player created successfully for song:', songId);
             } catch (playerError) {
                 console.error('Failed to create EmbeddedAudioPlayer:', playerError);
                 if (window.ErrorLogger) {
@@ -961,8 +988,23 @@ class SongDetails {
                     window.jamber3App.loadSongs();
                 }
                 
-                // Show success message
-                this.showMessage('Song updated successfully!', 'success');
+                // Ensure the search input remains functional after DOM updates
+                setTimeout(() => {
+                    const searchInput = document.getElementById('librarySearchInput');
+                    if (searchInput) {
+                        searchInput.disabled = false;
+                        searchInput.readOnly = false;
+                        searchInput.removeAttribute('disabled');
+                        searchInput.removeAttribute('readonly');
+                        
+                        // Re-initialize the search input to ensure it's fully functional
+                        if (window.songExplorer && typeof window.songExplorer.initializeSearchInput === 'function') {
+                            window.songExplorer.initializeSearchInput();
+                        }
+                    }
+                }, 100);
+                
+                // Success - no need for message, just continue
             } else {
                 throw new Error('Failed to save changes');
             }
@@ -985,7 +1027,6 @@ class SongDetails {
             artist: form.querySelector('[name="artist"]').value.trim(),
             album: form.querySelector('[name="album"]').value.trim(),
             lyrics_content: form.querySelector('[name="lyrics_content"]').value.trim(),
-            tablature_content: form.querySelector('[name="tablature_content"]').value.trim(),
             tablature_url: form.querySelector('[name="tablature_url"]').value.trim(),
             guitar_tab_url: form.querySelector('[name="guitar_tab_url"]').value.trim(),
             bass_tab_url: form.querySelector('[name="bass_tab_url"]').value.trim(),
@@ -1030,11 +1071,11 @@ class SongDetails {
             } else {
                 // Copy path to clipboard as fallback
                 navigator.clipboard.writeText(this.currentSong.file_path);
-                alert('File path copied to clipboard: ' + this.currentSong.file_path);
+                await customAlert('File path copied to clipboard: ' + this.currentSong.file_path, 'Copied');
             }
         } catch (error) {
             console.error('Error showing file in folder:', error);
-            alert('Could not show file in folder.');
+            await customAlert('Could not show file in folder.', 'Error');
         }
     }
 
@@ -1245,14 +1286,15 @@ class SongDetails {
     /**
      * Delete the current song
      */
-    deleteSong() {
+    async deleteSong() {
         if (!this.currentSong) return;
 
-        const confirmation = confirm(
+        const confirmation = await customConfirm(
             `Are you sure you want to remove "${this.currentSong.title}" from your library?\n\n` +
             'If the music file still exists on your hard drive, it will be marked as removed and won\'t be re-added on future scans.\n' +
             'If the file no longer exists, the database record will be deleted entirely.\n\n' +
-            'The actual music file will not be deleted from your hard drive.'
+            'The actual music file will not be deleted from your hard drive.',
+            'Remove Song from Library'
         );
 
         if (confirmation) {
@@ -1344,9 +1386,6 @@ class SongDetails {
                 <div class="edit-form-grid">
                     <label for="edit-lyrics-content">Lyrics Content:</label>
                     <textarea id="edit-lyrics-content" name="lyrics_content" rows="6" placeholder="Enter song lyrics here...">${this.escapeHtml(song.lyrics_content || '')}</textarea>
-                    
-                    <label for="edit-tablature-content">Tablature Content:</label>
-                    <textarea id="edit-tablature-content" name="tablature_content" rows="6" placeholder="Enter tablature notation here...">${this.escapeHtml(song.tablature_content || '')}</textarea>
                 </div>
             </div>
         `;
@@ -1474,29 +1513,29 @@ class SongDetails {
      * @param {Object} song - Song object
      */
     async loadSongSetlists(song) {
-        console.log('Loading setlists for song:', song.id);
+        // console.log('Loading setlists for song:', song.id);
         try {
             // Load song's setlists and all available setlists in parallel
-            console.log('Making API calls to fetch setlists...');
+            // console.log('Making API calls to fetch setlists...');
             const [songSetlistsResponse, allSetlistsResponse] = await Promise.all([
                 fetch(`/api/songs/${song.id}/setlists`),
                 fetch('/api/setlists')
             ]);
 
-            console.log('Song setlists response ok:', songSetlistsResponse.ok);
-            console.log('All setlists response ok:', allSetlistsResponse.ok);
+            // console.log('Song setlists response ok:', songSetlistsResponse.ok);
+            // console.log('All setlists response ok:', allSetlistsResponse.ok);
 
             if (allSetlistsResponse.ok) {
                 const allSetlists = await allSetlistsResponse.json();
-                console.log('All setlists:', allSetlists);
+                // console.log('All setlists:', allSetlists);
                 
                 // Handle song setlists - 404 is OK if song isn't in any setlists
                 let songSetlists = [];
                 if (songSetlistsResponse.ok) {
                     songSetlists = await songSetlistsResponse.json();
-                    console.log('Song setlists:', songSetlists);
+                    // console.log('Song setlists:', songSetlists);
                 } else if (songSetlistsResponse.status === 404) {
-                    console.log('Song is not in any setlists (404), using empty array');
+                    // console.log('Song is not in any setlists (404), using empty array');
                 } else {
                     console.error('Unexpected error fetching song setlists:', songSetlistsResponse.status);
                 }
@@ -1518,10 +1557,10 @@ class SongDetails {
      * @param {Array} setlists - Array of setlist objects
      */
     displaySongSetlists(setlists) {
-        console.log('displaySongSetlists called with:', setlists);
+        // console.log('displaySongSetlists called with:', setlists);
         const container = this.container.querySelector('#songSetlistsContainer');
         const rightColumn = this.container.querySelector('.setlist-memberships-right');
-        console.log('Container found:', container, 'Right column found:', rightColumn);
+        // console.log('Container found:', container, 'Right column found:', rightColumn);
         if (!container) return;
 
         // Always show the right column
@@ -1530,7 +1569,7 @@ class SongDetails {
         }
 
         if (!setlists || setlists.length === 0) {
-            console.log('No setlists for this song - showing "none" message');
+            // console.log('No setlists for this song - showing "none" message');
             container.innerHTML = '<div class="no-setlists-message">- none -</div>';
             return;
         }
@@ -1564,7 +1603,7 @@ class SongDetails {
                 e.stopPropagation();
                 const setlistId = parseInt(btn.dataset.setlistId);
                 const setlistName = btn.dataset.setlistName;
-                console.log('Remove button clicked:', { setlistId, setlistName });
+                // console.log('Remove button clicked:', { setlistId, setlistName });
                 this.handleRemoveFromSetlist(setlistId, setlistName);
             });
         });
@@ -1591,10 +1630,10 @@ class SongDetails {
      * @param {Array} songSetlists - Setlists this song already belongs to
      */
     populateSetlistDropdown(allSetlists, songSetlists) {
-        console.log('populateSetlistDropdown called with:', { allSetlists, songSetlists });
+        // console.log('populateSetlistDropdown called with:', { allSetlists, songSetlists });
         
         const dropdown = this.container.querySelector('#addToSetlistDropdown');
-        console.log('Dropdown element found:', dropdown);
+        // console.log('Dropdown element found:', dropdown);
         if (!dropdown) return;
 
         // Clear existing options except first one
@@ -1603,10 +1642,10 @@ class SongDetails {
         // Get IDs of setlists this song is already in
         const songSetlistIds = new Set(songSetlists.map(sl => sl.id));
 
-        console.log('Processing', allSetlists.length, 'setlists');
+        // console.log('Processing', allSetlists.length, 'setlists');
         // Add options for ALL setlists (users can add songs to any setlist)
         allSetlists.forEach(setlist => {
-            console.log('Adding setlist to dropdown:', setlist);
+            // console.log('Adding setlist to dropdown:', setlist);
             const option = document.createElement('option');
             option.value = setlist.id;
             
@@ -1623,7 +1662,7 @@ class SongDetails {
 
         // Always enable dropdown if setlists are available
         dropdown.disabled = dropdown.options.length === 1;
-        console.log('Dropdown populated. Final option count:', dropdown.options.length);
+        // console.log('Dropdown populated. Final option count:', dropdown.options.length);
     }
 
     /**
@@ -1632,7 +1671,7 @@ class SongDetails {
     async handleAddToSetlist() {
         const dropdown = this.container.querySelector('#addToSetlistDropdown');
         if (!dropdown || !dropdown.value) {
-            alert('Please select a setlist first.');
+            await customAlert('Please select a setlist first.', 'Select Setlist');
             return;
         }
 
@@ -1656,13 +1695,14 @@ class SongDetails {
                 if (window.jamber3App && typeof window.jamber3App.refreshSetlistDropdown === 'function') {
                     await window.jamber3App.refreshSetlistDropdown();
                 }
+                
             } else {
                 const error = await response.json();
-                alert(`Failed to add to setlist: ${error.error || 'Unknown error'}`);
+                await customAlert(`Failed to add to setlist: ${error.error || 'Unknown error'}`, 'Failed to Add');
             }
         } catch (error) {
             console.error('Error adding to setlist:', error);
-            alert('Network error: Could not add to setlist.');
+            await customAlert('Network error: Could not add to setlist.', 'Network Error');
         }
     }
 
@@ -1672,8 +1712,13 @@ class SongDetails {
      * @param {string} setlistName - Name of setlist for confirmation
      */
     async handleRemoveFromSetlist(setlistId, setlistName) {
-        const confirmed = confirm(`Remove "${this.currentSong.title}" from "${setlistName}"?`);
-        if (!confirmed) return;
+        const confirmed = await customConfirm(
+            `Remove "${this.currentSong.title}" from "${setlistName}"?`,
+            'Remove from Setlist'
+        );
+        if (!confirmed) {
+            return;
+        }
 
         try {
             const response = await fetch(`/api/songs/${this.currentSong.id}/setlists/${setlistId}`, {
@@ -1681,7 +1726,7 @@ class SongDetails {
             });
 
             if (response.ok) {
-                this.showMessage(`Successfully removed "${this.currentSong.title}" from "${setlistName}"`);
+                // this.showMessage(`Successfully removed "${this.currentSong.title}" from "${setlistName}"`); // Removed - not needed
                 
                 // Reload setlists to refresh the display
                 await this.loadSongSetlists(this.currentSong);
@@ -1690,13 +1735,14 @@ class SongDetails {
                 if (window.jamber3App && typeof window.jamber3App.refreshSetlistDropdown === 'function') {
                     await window.jamber3App.refreshSetlistDropdown();
                 }
+                
             } else {
                 const error = await response.json();
-                alert(`Failed to remove from setlist: ${error.error || 'Unknown error'}`);
+                await customAlert(`Failed to remove from setlist: ${error.error || 'Unknown error'}`, 'Failed to Remove');
             }
         } catch (error) {
             console.error('Error removing from setlist:', error);
-            alert('Network error: Could not remove from setlist.');
+            await customAlert('Network error: Could not remove from setlist.', 'Network Error');
         }
     }
 
@@ -1710,7 +1756,7 @@ class SongDetails {
             window.jamber3App.showMessage(message, 'success');
         } else {
             // Fallback to simple alert
-            console.log('[INFO]', message);
+            // console.log('[INFO]', message);
         }
     }
 }

@@ -197,6 +197,19 @@ class DatabaseService {
                 this.db.exec('CREATE INDEX IF NOT EXISTS idx_songs_is_removed ON songs(is_removed)');
                 console.log('is_removed column added successfully');
             }
+
+            // Check if tablature_content column exists, if so remove it
+            const hasTablatureContentColumn = columns.some(col => col.name === 'tablature_content');
+            
+            if (hasTablatureContentColumn) {
+                console.log('Removing tablature_content column from songs table...');
+                
+                // SQLite doesn't support DROP COLUMN, so we need to recreate the table
+                const migrationSQL = fs.readFileSync(path.join(__dirname, 'migrations', 'remove_tablature_content.sql'), 'utf8');
+                this.db.exec(migrationSQL);
+                
+                console.log('tablature_content column removed successfully');
+            }
         } catch (error) {
             console.error('Error running schema migrations:', error);
             // Don't throw error as this is not critical for app startup

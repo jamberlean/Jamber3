@@ -3497,3 +3497,54 @@ body.dark-theme .current-url-display:focus {
     color: #90cdf4;
     border-color: #2c5282;
 }
+
+/* Confirmation Modal Styles */
+.confirmation-modal {
+    z-index: 10000; /* Higher than other modals to ensure it appears on top */
+}
+
+.confirmation-content {
+    max-width: 500px;
+    width: 90%;
+    margin: 15% auto;
+}
+
+.confirmation-body {
+    padding: 20px;
+    text-align: center;
+}
+
+.confirmation-message {
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0;
+    color: var(--text-color, #333);
+}
+
+.confirmation-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    padding: 20px;
+    border-top: 1px solid #eee;
+}
+
+.confirmation-buttons .btn-secondary,
+.confirmation-buttons .btn-primary {
+    min-width: 100px;
+    padding: 10px 20px;
+}
+
+/* Dark theme support for confirmation modal */
+.dark-theme .confirmation-modal .modal-content {
+    background: #2d3748;
+    color: #e2e8f0;
+}
+
+.dark-theme .confirmation-buttons {
+    border-top-color: #4a5568;
+}
+
+.dark-theme .confirmation-message {
+    color: #e2e8f0;
+}

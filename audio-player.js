@@ -602,13 +602,13 @@ class EmbeddedAudioPlayer {
      * Set pitch shift with user confirmation
      * @param {number} semitones - Pitch shift in semitones (-12 to +12)
      */
-    setPitch(semitones) {
+    async setPitch(semitones) {
         const oldPitch = this.pitch;
         const newPitch = Math.max(-12, Math.min(12, semitones));
         
         // If moving from 0 to non-zero pitch, show confirmation dialog
         if (oldPitch === 0 && newPitch !== 0) {
-            const confirmed = this.confirmPitchShifting();
+            const confirmed = await this.confirmPitchShifting();
             if (!confirmed) {
                 // User cancelled - revert pitch slider to 0
                 if (this.pitchSlider) {
@@ -649,9 +649,9 @@ class EmbeddedAudioPlayer {
     
     /**
      * Show confirmation dialog for pitch shifting
-     * @returns {boolean} - True if user confirmed, false if cancelled
+     * @returns {Promise<boolean>} - True if user confirmed, false if cancelled
      */
-    confirmPitchShifting() {
+    async confirmPitchShifting() {
         const message = `Pitch shifting will disable some audio controls while active:
 
 • Time slider (seeking/skipping) will be disabled
@@ -661,7 +661,7 @@ class EmbeddedAudioPlayer {
 
 Do you want to enable pitch shifting?`;
 
-        return confirm(message);
+        return await customConfirm(message, 'Enable Pitch Shifting?');
     }
     
     /**
@@ -1107,11 +1107,11 @@ Do you want to enable pitch shifting?`;
      * Show error message
      * @param {string} message - Error message
      */
-    showError(message) {
+    async showError(message) {
         console.error('Audio Player Error:', message);
-        // Could integrate with a notification system later
-        if (typeof alert !== 'undefined') {
-            alert(`Audio Player Error: ${message}`);
+        // Could integrate with a notification system later - fire and forget to allow sync callers
+        if (typeof customAlert !== 'undefined') {
+            customAlert(`Audio Player Error: ${message}`, 'Audio Error').catch(console.error);
         }
     }
 
