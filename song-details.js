@@ -42,7 +42,6 @@ class SongDetails {
         try {
             // Don't re-render if it's the same song
             if (this.currentSong && this.currentSong.id === song.id) {
-                // console.log('[DEBUG] Same song already displayed, skipping render');
                 return;
             }
             
@@ -819,12 +818,10 @@ class SongDetails {
             const songId = this.currentSong.id;
             const filePath = this.currentSong.file_path;
             
-            // console.log('Initializing embedded audio player for song:', songId, filePath);
             
             // Clean up any existing player more thoroughly
             try {
                 if (this.audioPlayer) {
-                    // console.log('Cleaning up existing audio player');
                     this.audioPlayer.destroy();
                     this.audioPlayer = null;
                 }
@@ -864,7 +861,6 @@ class SongDetails {
                     window.currentAudioPlayer = this.audioPlayer;
                 }, 10);
                 
-                // console.log('Audio player created successfully for song:', songId);
             } catch (playerError) {
                 console.error('Failed to create EmbeddedAudioPlayer:', playerError);
                 if (window.ErrorLogger) {
@@ -1513,29 +1509,22 @@ class SongDetails {
      * @param {Object} song - Song object
      */
     async loadSongSetlists(song) {
-        // console.log('Loading setlists for song:', song.id);
         try {
             // Load song's setlists and all available setlists in parallel
-            // console.log('Making API calls to fetch setlists...');
             const [songSetlistsResponse, allSetlistsResponse] = await Promise.all([
                 fetch(`/api/songs/${song.id}/setlists`),
                 fetch('/api/setlists')
             ]);
 
-            // console.log('Song setlists response ok:', songSetlistsResponse.ok);
-            // console.log('All setlists response ok:', allSetlistsResponse.ok);
 
             if (allSetlistsResponse.ok) {
                 const allSetlists = await allSetlistsResponse.json();
-                // console.log('All setlists:', allSetlists);
                 
                 // Handle song setlists - 404 is OK if song isn't in any setlists
                 let songSetlists = [];
                 if (songSetlistsResponse.ok) {
                     songSetlists = await songSetlistsResponse.json();
-                    // console.log('Song setlists:', songSetlists);
                 } else if (songSetlistsResponse.status === 404) {
-                    // console.log('Song is not in any setlists (404), using empty array');
                 } else {
                     console.error('Unexpected error fetching song setlists:', songSetlistsResponse.status);
                 }
@@ -1557,10 +1546,8 @@ class SongDetails {
      * @param {Array} setlists - Array of setlist objects
      */
     displaySongSetlists(setlists) {
-        // console.log('displaySongSetlists called with:', setlists);
         const container = this.container.querySelector('#songSetlistsContainer');
         const rightColumn = this.container.querySelector('.setlist-memberships-right');
-        // console.log('Container found:', container, 'Right column found:', rightColumn);
         if (!container) return;
 
         // Always show the right column
@@ -1569,7 +1556,6 @@ class SongDetails {
         }
 
         if (!setlists || setlists.length === 0) {
-            // console.log('No setlists for this song - showing "none" message');
             container.innerHTML = '<div class="no-setlists-message">- none -</div>';
             return;
         }
@@ -1603,7 +1589,6 @@ class SongDetails {
                 e.stopPropagation();
                 const setlistId = parseInt(btn.dataset.setlistId);
                 const setlistName = btn.dataset.setlistName;
-                // console.log('Remove button clicked:', { setlistId, setlistName });
                 this.handleRemoveFromSetlist(setlistId, setlistName);
             });
         });
@@ -1630,10 +1615,8 @@ class SongDetails {
      * @param {Array} songSetlists - Setlists this song already belongs to
      */
     populateSetlistDropdown(allSetlists, songSetlists) {
-        // console.log('populateSetlistDropdown called with:', { allSetlists, songSetlists });
         
         const dropdown = this.container.querySelector('#addToSetlistDropdown');
-        // console.log('Dropdown element found:', dropdown);
         if (!dropdown) return;
 
         // Clear existing options except first one
@@ -1642,10 +1625,8 @@ class SongDetails {
         // Get IDs of setlists this song is already in
         const songSetlistIds = new Set(songSetlists.map(sl => sl.id));
 
-        // console.log('Processing', allSetlists.length, 'setlists');
         // Add options for ALL setlists (users can add songs to any setlist)
         allSetlists.forEach(setlist => {
-            // console.log('Adding setlist to dropdown:', setlist);
             const option = document.createElement('option');
             option.value = setlist.id;
             
@@ -1662,7 +1643,6 @@ class SongDetails {
 
         // Always enable dropdown if setlists are available
         dropdown.disabled = dropdown.options.length === 1;
-        // console.log('Dropdown populated. Final option count:', dropdown.options.length);
     }
 
     /**
@@ -1756,7 +1736,6 @@ class SongDetails {
             window.jamber3App.showMessage(message, 'success');
         } else {
             // Fallback to simple alert
-            // console.log('[INFO]', message);
         }
     }
 }

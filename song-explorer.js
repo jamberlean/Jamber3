@@ -386,7 +386,6 @@ class SongExplorer {
             try {
                 // Safety check - ensure container still exists
                 if (!this.container) {
-                    console.error('[DEBUG] Container lost during render');
                     this.isRendering = false;
                     return;
                 }
@@ -417,7 +416,6 @@ class SongExplorer {
                     try {
                         // Another safety check
                         if (!this.container) {
-                            console.error('[DEBUG] Container lost before event attachment');
                             this.isRendering = false;
                             return;
                         }
@@ -457,7 +455,6 @@ class SongExplorer {
                             setTimeout(() => this.selectSong(pendingId), 50);
                         }
                     } catch (innerError) {
-                        console.error('[DEBUG] Error attaching event listeners:', innerError);
                         if (window.ErrorLogger) {
                             window.ErrorLogger.logError('SongExplorer', 'attachEventListeners', innerError, {
                                 additionalInfo: {
@@ -470,7 +467,6 @@ class SongExplorer {
                     }
                 });
             } catch (error) {
-                console.error('[DEBUG] Error during DOM update:', error);
                 if (window.ErrorLogger) {
                     window.ErrorLogger.logError('SongExplorer', 'render', error, {
                         additionalInfo: {
@@ -717,7 +713,6 @@ class SongExplorer {
     attachTreeEventListeners() {
         // Safety check - don't attach listeners if container is missing
         if (!this.container) {
-            console.error('[DEBUG] Cannot attach event listeners - container missing');
             return;
         }
         

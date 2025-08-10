@@ -28,7 +28,6 @@ class Jamber3App {
             // Initialize event listeners
             this.initializeEventListeners();
             
-            // console.log('Jamber3 initialized successfully');
         } catch (error) {
             console.error('Error initializing Jamber3:', error);
             this.showError('Failed to initialize application');
@@ -220,7 +219,6 @@ class Jamber3App {
      * Start music scanning process
      */
     async startMusicScan() {
-        // console.log('startMusicScan called');
         
         // Check if we're already scanning
         if (this.isScanning) {
