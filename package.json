@@ -21,8 +21,10 @@
     "soundtouchjs": "^0.2.1"
   },
   "devDependencies": {
+    "buffer-crc32": "^1.0.0",
     "electron": "^28.0.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8"
   },
   "keywords": [
     "guitar",
@@ -43,12 +45,17 @@
       "**/*",
       "!**/*.log",
       "!dist/**/*",
-      "!node_modules/.cache/**/*"
+      "!node_modules/.cache/**/*",
+      "!**/*.db",
+      "!**/*.db-shm",
+      "!**/*.db-wal"
     ],
     "win": {
-      "target": "dir",
+      "target": "nsis",
       "icon": "icons/icon.ico",
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "forceCodeSigning": false,
+      "signAndEditExecutable": false
     },
     "mac": {
       "target": "dmg",
@@ -60,7 +67,15 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "installerIcon": "icons/icon.ico",
+      "uninstallerIcon": "icons/icon.ico",
+      "installerHeaderIcon": "icons/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Jamber3",
+      "license": "LICENSE.txt"
     }
   }
 }

@@ -119,3 +119,6 @@ temp/
 
 # Electron build output
 dist/
+
+# Planning documents
+OnlineMusicPlan.md
