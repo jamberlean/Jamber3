@@ -9,16 +9,20 @@
     "debug": "set NODE_ENV=development && electron .",
     "debug-server": "set NODE_ENV=development && node server.js",
     "server": "node server.js",
-    "build": "electron-builder"
+    "rebuild": "electron-rebuild",
+    "build": "electron-builder",
+    "dist": "npm run rebuild && npm run build"
   },
   "dependencies": {
     "axios": "^1.11.0",
-    "better-sqlite3": "^11.1.2",
+    "better-sqlite3": "^11.10.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "howler": "^2.2.4",
     "music-metadata": "^11.7.3",
-    "soundtouchjs": "^0.2.1"
+    "pitch-shift": "^0.0.0",
+    "soundtouchjs": "^0.2.1",
+    "tone": "^15.1.22"
   },
   "devDependencies": {
     "buffer-crc32": "^1.0.0",
@@ -39,16 +43,52 @@
     "appId": "com.jamber3.app",
     "productName": "Jamber3",
     "directories": {
-      "output": "dist"
+      "output": "build-output"
     },
+    "asar": false,
     "files": [
-      "**/*",
+      "index.html",
+      "styles.css",
+      "electron-main.js",
+      "server.js",
+      "libs/**/*",
+      "icons/**/*",
+      "database-service.js",
+      "config-manager.js",
+      "file-logger.js",
+      "error-logger.js",
+      "global-error-handler.js",
+      "input-field-utils.js",
+      "confirmation-modal.js",
+      "progress-indicator.js",
+      "song-explorer.js",
+      "song-details.js",
+      "resource-review.js",
+      "audio-player.js",
+      "jamber3-app.js",
+      "metadata-extractor.js",
+      "mp3-scanner.js",
+      "resource-finder.js",
+      "migrations/**/*",
+      "sqlite-schema.sql",
+      "default-config.json",
       "!**/*.log",
       "!dist/**/*",
-      "!node_modules/.cache/**/*",
       "!**/*.db",
       "!**/*.db-shm",
-      "!**/*.db-wal"
+      "!**/*.db-wal",
+      "!ultra-simple.html",
+      "!simple.html",
+      "!preload.js"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
       "target": "nsis",

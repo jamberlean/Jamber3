@@ -36,7 +36,27 @@
       "Bash(move:*)",
       "Bash(rd:*)",
       "Bash(cmd.exe /c \"Create-Desktop-Shortcut.bat\")",
-      "Bash(./Create-Desktop-Shortcut.bat)"
+      "Bash(./Create-Desktop-Shortcut.bat)",
+      "Bash(npm run build:*)",
+      "Bash(set CSC_IDENTITY_AUTO_DISCOVERY=false)",
+      "Bash(powershell:*)",
+      "Bash(cmd /c:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx:*)",
+      "Bash(npm run dist:*)",
+      "Bash(for file in *.js)",
+      "Bash(do echo \"Checking $file\")",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(start:*)",
+      "Bash(\"Jamber3 Setup 1.0.0.exe\" /S)",
+      "Bash(npm run rebuild:*)",
+      "Bash(npm rebuild:*)",
+      "Bash(tasklist)",
+      "Bash(npm run dev:*)",
+      "Bash(git rm:*)",
+      "Bash(git stash push:*)"
     ],
     "deny": []
   }

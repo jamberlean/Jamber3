@@ -400,7 +400,7 @@ const startServer = (callback) => {
     
     logToFile('Starting server', { isPackaged, isDebug });
     
-    if (isPackaged) {
+    if (true) { // Force embedded server for both dev and packaged to avoid Node.js version conflicts
         // In packaged app, run the server in the same process
         logToFile('Running in packaged mode - starting embedded server');
         

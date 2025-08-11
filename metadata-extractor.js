@@ -1,10 +1,35 @@
-const { parseFile } = require('music-metadata');
+// Handle both CommonJS and ES module imports for music-metadata
+let parseFile;
+try {
+    // Try CommonJS require first
+    const musicMetadata = require('music-metadata');
+    parseFile = musicMetadata.parseFile;
+} catch (error) {
+    console.warn('Failed to load music-metadata via require, trying dynamic import...');
+    // Will be set asynchronously if needed
+    parseFile = null;
+}
+
 const path = require('path');
 const fs = require('fs');
 
 class MetadataExtractor {
     constructor() {
         this.supportedFormats = ['.mp3', '.m4a', '.wav', '.flac', '.ogg'];
+        this.metadataReady = this.initializeMetadata();
+    }
+
+    async initializeMetadata() {
+        if (!parseFile) {
+            try {
+                // Try dynamic import for ES modules
+                const musicMetadata = await import('music-metadata');
+                parseFile = musicMetadata.parseFile;
+            } catch (error) {
+                console.error('Failed to load music-metadata:', error);
+            }
+        }
+        return true;
     }
 
     /**
@@ -14,6 +39,9 @@ class MetadataExtractor {
      */
     async extractMetadata(filePath) {
         try {
+            // Ensure metadata module is loaded
+            await this.metadataReady;
+
             // Check if file exists
             if (!fs.existsSync(filePath)) {
                 throw new Error(`File not found: ${filePath}`);
@@ -23,6 +51,12 @@ class MetadataExtractor {
             const ext = path.extname(filePath).toLowerCase();
             if (!this.supportedFormats.includes(ext)) {
                 console.warn(`Unsupported format: ${ext} for file: ${filePath}`);
+                return this.createFallbackMetadata(filePath);
+            }
+
+            // If parseFile is not available, use fallback
+            if (!parseFile) {
+                console.warn('music-metadata not available, using fallback');
                 return this.createFallbackMetadata(filePath);
             }
 

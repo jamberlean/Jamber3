@@ -2527,15 +2527,16 @@ body.dark-theme .speed-display {
     }
 }
 
-/* Pitch Control Section */
+/* Pitch Control Section - HIDDEN FOR STABILITY */
 .audio-pitch-section {
+    display: none !important;
     padding: 15px;
     background: #f8f9fa;
     border-top: 1px solid #e9ecef;
 }
 
 .pitch-controls {
-    display: flex;
+    display: none !important;
     justify-content: center;
 }
 

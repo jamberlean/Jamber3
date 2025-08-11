@@ -39,6 +39,14 @@ class Jamber3App {
      */
     async loadConfiguration() {
         try {
+            // Skip config loading in packaged mode
+            if (window.location.protocol === 'file:') {
+                this.config = { ui_preferences: { theme: 'light' } };
+                this.currentTheme = 'light';
+                this.applyTheme(this.currentTheme);
+                return;
+            }
+            
             const response = await fetch('/api/config');
             if (response.ok) {
                 this.config = await response.json();
@@ -47,6 +55,10 @@ class Jamber3App {
             }
         } catch (error) {
             console.error('Error loading configuration:', error);
+            // Use default config
+            this.config = { ui_preferences: { theme: 'light' } };
+            this.currentTheme = 'light';
+            this.applyTheme(this.currentTheme);
         }
     }
 
@@ -73,6 +85,17 @@ class Jamber3App {
      */
     async loadSongsWithProgress() {
         try {
+            // Check if we're in packaged mode without server
+            const isPackaged = window.location.protocol === 'file:';
+            
+            if (isPackaged) {
+                // In packaged mode, show first-run instructions immediately
+                console.log('Running in packaged mode - showing first run instructions');
+                this.showFirstRunInstructions();
+                window.songExplorer.loadSongs([]);
+                return;
+            }
+
             // Show loading indicator
             window.progressIndicator.show('loading-songs', {
                 message: 'Loading music library...',
@@ -87,6 +110,16 @@ class Jamber3App {
                 });
 
                 const songs = await response.json();
+                
+                // Check if this is first run with empty library
+                if (!songs || songs.length === 0) {
+                    window.progressIndicator.hide('loading-songs');
+                    this.showFirstRunInstructions();
+                    // Still load empty array to initialize the explorer
+                    window.songExplorer.loadSongs([]);
+                    return;
+                }
+                
                 window.songExplorer.loadSongs(songs);
 
                 // Also refresh setlists dropdown
@@ -101,11 +134,20 @@ class Jamber3App {
                 setTimeout(() => {
                     window.progressIndicator.hide('loading-songs');
                 }, 1000);
+            } else {
+                // Handle non-OK response gracefully
+                window.progressIndicator.hide('loading-songs');
+                const songs = [];
+                window.songExplorer.loadSongs(songs);
+                this.showFirstRunInstructions();
             }
         } catch (error) {
             console.error('Error loading songs:', error);
             window.progressIndicator.hide('loading-songs');
-            this.showError('Failed to load music library');
+            // Don't show error on first run, show instructions instead
+            this.showFirstRunInstructions();
+            // Still initialize with empty array
+            window.songExplorer.loadSongs([]);
         }
     }
 
@@ -114,6 +156,12 @@ class Jamber3App {
      */
     async loadSetlists() {
         try {
+            // Skip setlists loading in packaged mode
+            if (window.location.protocol === 'file:') {
+                this.populateSetlistDropdown([]);
+                return;
+            }
+            
             const response = await fetch('/api/setlists');
             if (response.ok) {
                 const setlists = await response.json();
@@ -121,6 +169,8 @@ class Jamber3App {
             }
         } catch (error) {
             console.error('Error loading setlists:', error);
+            // Use empty setlists
+            this.populateSetlistDropdown([]);
         }
     }
 
@@ -185,10 +235,22 @@ class Jamber3App {
      * Initialize event listeners
      */
     initializeEventListeners() {
+        const isPackaged = window.location.protocol === 'file:';
+        
         // Scan button
         const scanBtn = document.getElementById('scanBtn');
         if (scanBtn) {
-            scanBtn.addEventListener('click', () => this.startMusicScan());
+            if (isPackaged) {
+                scanBtn.style.opacity = '0.5';
+                scanBtn.style.cursor = 'not-allowed';
+                scanBtn.title = 'Scanning not available in packaged version';
+                scanBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.showPackagedModeMessage('Music scanning is not available in the packaged version. Please use the development version for full functionality.');
+                });
+            } else {
+                scanBtn.addEventListener('click', () => this.startMusicScan());
+            }
         }
 
         // Help button
@@ -200,7 +262,17 @@ class Jamber3App {
         // Settings button
         const settingsBtn = document.getElementById('settingsBtn');
         if (settingsBtn) {
-            settingsBtn.addEventListener('click', () => this.openSettings());
+            if (isPackaged) {
+                settingsBtn.style.opacity = '0.5';
+                settingsBtn.style.cursor = 'not-allowed';
+                settingsBtn.title = 'Settings not available in packaged version';
+                settingsBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.showPackagedModeMessage('Settings are not available in the packaged version. Please use the development version for full functionality.');
+                });
+            } else {
+                settingsBtn.addEventListener('click', () => this.openSettings());
+            }
         }
 
         // Listen for song events
@@ -819,8 +891,23 @@ class Jamber3App {
 
         // Save settings
         document.getElementById('saveSettings')?.addEventListener('click', () => {
-            this.saveSettingsChanges(config);
+            // Get the current config from the modal data attribute or use the passed config
+            const currentConfig = modal.dataset.currentConfig ? JSON.parse(modal.dataset.currentConfig) : config;
+            this.saveSettingsChanges(currentConfig);
         });
+        
+        // Store the initial config on the modal for later updates
+        modal.dataset.currentConfig = JSON.stringify(config);
+    }
+
+    /**
+     * Update the config stored in the modal
+     */
+    updateModalConfig(config) {
+        const modal = document.getElementById('settingsModal');
+        if (modal) {
+            modal.dataset.currentConfig = JSON.stringify(config);
+        }
     }
 
     /**
@@ -988,6 +1075,9 @@ class Jamber3App {
                 } else if (type === 'excluded') {
                     this.refreshExcludedPathsInModal(result.config);
                 }
+                
+                // Update the stored config in the modal
+                this.updateModalConfig(result.config);
             } else {
                 // Show error message
                 this.showPathValidationMessage(
@@ -1062,6 +1152,9 @@ class Jamber3App {
                 } else if (type === 'excluded') {
                     this.refreshExcludedPathsInModal(result.config);
                 }
+                
+                // Update the stored config in the modal
+                this.updateModalConfig(result.config);
 
                 // Refresh the song list if songs were removed
                 if (result.removedSongs && result.removedSongs > 0) {
@@ -1535,6 +1628,178 @@ For more information, visit the Jamber3 documentation.
     }
     
     /**
+     * Show packaged mode limitation message
+     */
+    showPackagedModeMessage(message) {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 450px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            text-align: center;
+        `;
+
+        modal.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 20px;">📦</div>
+            <h3 style="margin: 0 0 15px 0; color: #856404;">Limited Functionality</h3>
+            <p style="line-height: 1.6; color: #856404; margin-bottom: 25px;">${message}</p>
+            <button onclick="this.closest('.modal-overlay').remove()" style="
+                background: #ffc107;
+                color: #856404;
+                border: none;
+                padding: 10px 25px;
+                border-radius: 6px;
+                font-size: 16px;
+                cursor: pointer;
+                font-weight: 500;
+            ">OK</button>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                overlay.remove();
+            }
+        }, 5000);
+    }
+
+    /**
+     * Show first run instructions
+     */
+    showFirstRunInstructions() {
+        // Create a helpful welcome message for first-time users
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        const modal = document.createElement('div');
+        modal.className = 'welcome-modal';
+        modal.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            animation: slideIn 0.3s ease-out;
+        `;
+
+        const isPackaged = window.location.protocol === 'file:';
+        
+        modal.innerHTML = `
+            <h2 style="margin-top: 0; color: #2c3e50;">Welcome to Jamber3!</h2>
+            <p style="line-height: 1.6; color: #555;">
+                Your automated guitar song library is ready to get started.
+            </p>
+            ${isPackaged ? `
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                <h3 style="margin-top: 0; color: #856404; font-size: 16px;">📦 Packaged Version Note</h3>
+                <p style="margin: 10px 0; color: #856404; font-size: 14px;">
+                    You're running the packaged version of Jamber3. Some features like music scanning 
+                    and settings are currently limited. For full functionality, please run the 
+                    development version with <code>npm start</code>.
+                </p>
+            </div>
+            ` : `
+            <div style="background: #f0f4f8; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #2c3e50; font-size: 16px;">To add music to your library:</h3>
+                <ol style="margin: 10px 0; padding-left: 20px; color: #666;">
+                    <li style="margin: 8px 0;">Click the <strong>Settings</strong> button (⚙️) in the top right</li>
+                    <li style="margin: 8px 0;">Add folders containing your music files</li>
+                    <li style="margin: 8px 0;">Click <strong>Scan for Music</strong> to import your songs</li>
+                </ol>
+            </div>
+            <p style="color: #666; font-size: 14px;">
+                Jamber3 will automatically find guitar tabs and resources for your songs!
+            </p>
+            `}
+            <div style="text-align: center; margin-top: 25px;">
+                <button id="welcomeOkBtn" style="
+                    background: #3498db;
+                    color: white;
+                    border: none;
+                    padding: 10px 30px;
+                    border-radius: 6px;
+                    font-size: 16px;
+                    cursor: pointer;
+                    transition: background 0.3s;
+                ">Got It</button>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // Add animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    transform: translateY(-20px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateY(0);
+                    opacity: 1;
+                }
+            }
+            #welcomeOkBtn:hover {
+                background: #2980b9 !important;
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Handle button click
+        const okBtn = document.getElementById('welcomeOkBtn');
+        okBtn.onclick = () => {
+            overlay.remove();
+            style.remove();
+            // Optionally open settings automatically
+            // this.openSettings();
+        };
+
+        // Allow closing with Escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                overlay.remove();
+                style.remove();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+    }
+    
+    /**
      * Show scan results in a custom modal
      */
     showScanResults(message) {
@@ -1683,6 +1948,16 @@ For more information, visit the Jamber3 documentation.
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.jamber3App = new Jamber3App();
-    
+    try {
+        // Only initialize if not already initialized
+        if (!window.jamber3App) {
+            window.jamber3App = new Jamber3App();
+        }
+    } catch (error) {
+        console.error('Failed to initialize Jamber3App:', error);
+        // Show error to user
+        if (document.body) {
+            document.body.innerHTML += '<div style="padding: 20px; color: red;">Application initialization error: ' + error.message + '</div>';
+        }
+    }
 });

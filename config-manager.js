@@ -2,11 +2,40 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const CONFIG_FILE = path.join(__dirname, 'jamber3-config.json');
+// In Electron packaged app, use userData directory; otherwise use current directory
+function getDataPath() {
+    if (process.versions && process.versions.electron) {
+        try {
+            const { app } = require('electron');
+            return app.getPath('userData');
+        } catch (e) {
+            // If we can't access electron (e.g., in renderer process), check for remote
+            try {
+                const { remote } = require('electron');
+                return remote.app.getPath('userData');
+            } catch (e2) {
+                // Fallback to current directory
+                return __dirname;
+            }
+        }
+    }
+    return __dirname;
+}
+
+const DEFAULT_CONFIG_FILE = path.join(__dirname, 'default-config.json');
 
 class ConfigManager {
     constructor() {
         this.config = this.loadConfig();
+    }
+
+    /**
+     * Get the configuration file path dynamically
+     * @returns {string} Path to the configuration file
+     */
+    getConfigFilePath() {
+        const dataPath = getDataPath();
+        return path.join(dataPath, 'jamber3-config.json');
     }
 
     /**
@@ -15,6 +44,20 @@ class ConfigManager {
      */
     loadConfig() {
         try {
+            const CONFIG_FILE = this.getConfigFilePath();
+            
+            // In packaged app, copy default config to userData if it doesn't exist
+            if (!fs.existsSync(CONFIG_FILE) && fs.existsSync(DEFAULT_CONFIG_FILE)) {
+                console.log('Copying default config to user data directory');
+                const defaultData = fs.readFileSync(DEFAULT_CONFIG_FILE, 'utf8');
+                // Ensure directory exists
+                const dir = path.dirname(CONFIG_FILE);
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                }
+                fs.writeFileSync(CONFIG_FILE, defaultData);
+            }
+            
             if (fs.existsSync(CONFIG_FILE)) {
                 const data = fs.readFileSync(CONFIG_FILE, 'utf8');
                 const config = JSON.parse(data);
@@ -183,6 +226,7 @@ class ConfigManager {
             }
 
             // Write to the config file with proper formatting
+            const CONFIG_FILE = this.getConfigFilePath();
             const configJson = JSON.stringify(configToSave, null, 2);
             fs.writeFileSync(CONFIG_FILE, configJson, 'utf8');
             

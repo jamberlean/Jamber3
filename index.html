@@ -131,11 +131,13 @@
     </div>
 
 
-    <script src="node_modules/howler/dist/howler.min.js"></script>
-    <script type="module">
-        import { PitchShifter } from './node_modules/soundtouchjs/dist/soundtouch.js';
-        window.SoundTouchJS = { PitchShifter };
+    <script src="libs/howler.min.js"></script>
+    <script>
+        // Pitch shifting causes renderer crashes in current Electron setup - disabled permanently
+        window.SoundTouchJS = null;
+        console.log('Pitch shifting disabled - incompatible with current Electron configuration');
     </script>
+    <script src="file-logger.js"></script>
     <script src="error-logger.js"></script>
     <script src="global-error-handler.js"></script>
     <script src="input-field-utils.js"></script>
@@ -146,5 +148,56 @@
     <script src="resource-review.js"></script>
     <script src="audio-player.js"></script>
     <script src="jamber3-app.js"></script>
+    <script>
+        // Error handler for script loading issues
+        window.addEventListener('error', (event) => {
+            console.error('Script loading error:', event.message, event.filename);
+            if (event.filename && event.filename.includes('libs/')) {
+                console.error('Failed to load library from libs folder');
+            }
+        }, true);
+        
+        // Log startup info immediately
+        window.logError('App Startup', {
+            location: window.location.href,
+            userAgent: navigator.userAgent,
+            timestamp: new Date().toISOString()
+        });
+        
+        // Verify critical dependencies after DOM loads
+        window.addEventListener('DOMContentLoaded', () => {
+            window.logError('DOM Content Loaded', {
+                timestamp: new Date().toISOString()
+            });
+            
+            setTimeout(() => {
+                // Check if app initialized
+                if (!window.jamber3App) {
+                    console.error('App failed to initialize');
+                    window.logError('App Initialization Failed', {
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Check what's missing
+                    const missing = [];
+                    if (typeof Howl === 'undefined') missing.push('Howler.js');
+                    if (typeof Jamber3App === 'undefined') missing.push('Jamber3App');
+                    if (typeof SongExplorer === 'undefined') missing.push('SongExplorer');
+                    
+                    if (missing.length > 0) {
+                        window.logError('Missing Dependencies', {
+                            missing: missing,
+                            timestamp: new Date().toISOString()
+                        });
+                        document.body.innerHTML = '<div style="padding: 20px;"><h2>Loading Error</h2><p>Failed to load: ' + missing.join(', ') + '</p><p>Check error logs in %APPDATA%/Jamber3/logs/</p></div>';
+                    }
+                } else {
+                    window.logError('App Initialized Successfully', {
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            }, 1000); // Give app time to initialize
+        });
+    </script>
 </body>
 </html>

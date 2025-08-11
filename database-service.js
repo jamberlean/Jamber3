@@ -2,8 +2,26 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-const DB_FILE = path.join(__dirname, 'jamber3.db');
-const JSON_BACKUP_FILE = path.join(__dirname, 'songs.json');
+// In Electron packaged app, use userData directory; otherwise use current directory
+function getDataPath() {
+    if (process.versions && process.versions.electron) {
+        try {
+            const { app } = require('electron');
+            return app.getPath('userData');
+        } catch (e) {
+            // If we can't access electron (e.g., in renderer process), check for remote
+            try {
+                const { remote } = require('electron');
+                return remote.app.getPath('userData');
+            } catch (e2) {
+                // Fallback to current directory
+                return __dirname;
+            }
+        }
+    }
+    return __dirname;
+}
+
 const SCHEMA_FILE = path.join(__dirname, 'sqlite-schema.sql');
 
 class DatabaseService {
@@ -12,9 +30,20 @@ class DatabaseService {
         this.setupDatabase();
     }
 
+    getDatabasePath() {
+        const dataPath = getDataPath();
+        return path.join(dataPath, 'jamber3.db');
+    }
+
+    getJsonBackupPath() {
+        const dataPath = getDataPath();
+        return path.join(dataPath, 'songs.json');
+    }
+
     setupDatabase() {
         try {
             // Create SQLite database
+            const DB_FILE = this.getDatabasePath();
             this.db = new Database(DB_FILE);
             
             // Set database pragmas for performance
@@ -54,6 +83,7 @@ class DatabaseService {
             }
 
             // Check if JSON file exists
+            const JSON_BACKUP_FILE = this.getJsonBackupPath();
             if (!fs.existsSync(JSON_BACKUP_FILE)) {
                 return;
             }

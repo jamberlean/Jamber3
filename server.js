@@ -635,16 +635,21 @@ app.post('/api/config/add-excluded-path', async (req, res) => {
             return res.status(400).json({ error: 'Path is required' });
         }
 
-        // For excluded paths, we don't require them to exist (they might be patterns or deleted paths)
-        // But we do validate if it's provided as an absolute path that it exists
-        if (path.includes(':') || path.startsWith('/')) {
-            // This looks like an absolute path, validate it exists
-            if (!fs.existsSync(path)) {
-                return res.status(400).json({ 
-                    error: 'Path does not exist',
-                    details: `The directory "${path}" could not be found on your system. Please verify the path is correct and try again.`
-                });
-            }
+        // Validate that the path exists (same validation as enabled paths)
+        if (!fs.existsSync(path)) {
+            return res.status(400).json({ 
+                error: 'Path does not exist',
+                details: `The directory "${path}" could not be found on your system. Please verify the path is correct and try again.`
+            });
+        }
+
+        // Check if it's actually a directory
+        const stats = fs.statSync(path);
+        if (!stats.isDirectory()) {
+            return res.status(400).json({ 
+                error: 'Path is not a directory',
+                details: `"${path}" is not a directory. Please select a folder path.`
+            });
         }
 
         // Get current config
@@ -897,16 +902,22 @@ app.put('/api/config/paths', (req, res) => {
         config.scan_directories.enabled_paths = enabled_paths;
         config.scan_directories.excluded_paths = excluded_paths;
         
-        // Note: Since the config is read-only, we can't save it directly
-        // The user would need to manually update the jamber3-config.json file
-        // For now, we'll return success but note that changes are temporary
-        
-        
-        res.json({ 
-            success: true, 
-            message: 'Path configuration updated successfully',
-            note: 'Changes are temporary and will not persist after restart. To make changes permanent, update jamber3-config.json manually.'
-        });
+        // Save the updated config to disk
+        try {
+            configManager.saveConfig(config);
+            res.json({ 
+                success: true, 
+                message: 'Path configuration updated successfully and saved to disk',
+                enabled_paths,
+                excluded_paths
+            });
+        } catch (saveError) {
+            console.error('Error saving config:', saveError);
+            res.status(500).json({ 
+                error: 'Failed to save configuration',
+                details: saveError.message
+            });
+        }
     } catch (error) {
         console.error('Error updating path configuration:', error);
         res.status(500).json({ error: 'Failed to update path configuration' });
@@ -1089,11 +1100,25 @@ app.post('/api/restore', (req, res) => {
     }
 });
 
-const server = app.listen(PORT, () => {
-    console.log(`Jamber3 server running on http://localhost:${PORT}`);
-    // Signal that the server is ready
-    console.log('SERVER_READY');
-});
+// Wrap server startup in try-catch for better error handling
+let server;
+try {
+    server = app.listen(PORT, () => {
+        console.log(`Jamber3 server running on http://localhost:${PORT}`);
+        // Signal that the server is ready
+        console.log('SERVER_READY');
+    });
+    
+    server.on('error', (error) => {
+        console.error('Server error:', error);
+        if (error.code === 'EADDRINUSE') {
+            console.error(`Port ${PORT} is already in use. Please close other applications using this port.`);
+        }
+    });
+} catch (error) {
+    console.error('Failed to start server:', error);
+    throw error;
+}
 
 // Graceful shutdown handling
 const gracefulShutdown = (signal) => {
@@ -1124,17 +1149,27 @@ const gracefulShutdown = (signal) => {
     }, 5000);
 };
 
-// Listen for termination signals
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+// Only set up process handlers when running as standalone script
+if (require.main === module) {
+    // Listen for termination signals
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
-    gracefulShutdown('UNCAUGHT_EXCEPTION');
-});
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+        console.error('Uncaught Exception:', error);
+        gracefulShutdown('UNCAUGHT_EXCEPTION');
+    });
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    gracefulShutdown('UNHANDLED_REJECTION');
-});
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+        gracefulShutdown('UNHANDLED_REJECTION');
+    });
+}
+
+// Export the server instance and app for use as a module
+module.exports = {
+    server: server,
+    app: app,
+    gracefulShutdown: gracefulShutdown
+};
