@@ -3,6 +3,54 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
+// Main process logger
+function logToFile(message, data = {}) {
+    try {
+        const logDir = path.join(app.getPath('userData'), 'main-logs');
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+        }
+        
+        const logFile = path.join(logDir, `main-${new Date().toISOString().split('T')[0]}.log`);
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            message: message,
+            data: data,
+            isPackaged: app.isPackaged
+        };
+        
+        fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n');
+        console.log('[MAIN LOG]:', message, data);
+    } catch (error) {
+        console.error('[MAIN LOG ERROR]:', error);
+    }
+}
+
+// Log startup
+logToFile('Electron main process starting', {
+    version: process.versions.electron,
+    node: process.versions.node,
+    platform: process.platform,
+    arch: process.arch
+});
+
+// Catch all uncaught exceptions
+process.on('uncaughtException', (error) => {
+    logToFile('Uncaught Exception in Main Process', {
+        error: error.message,
+        stack: error.stack
+    });
+    console.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logToFile('Unhandled Rejection in Main Process', {
+        reason: reason,
+        promise: promise
+    });
+    console.error('Unhandled Rejection:', reason);
+});
+
 // Reduce GPU process warnings on Windows
 if (process.platform === 'win32') {
     app.commandLine.appendSwitch('disable-gpu-sandbox');
@@ -13,13 +61,23 @@ if (process.platform === 'win32') {
 
 let mainWindow;
 let serverProcess;
+let serverModule; // For embedded server in packaged mode
 
-// Path for window state file
-const WINDOW_STATE_FILE = path.join(__dirname, 'window-state.json');
+// Path for window state file - use userData directory for consistency
+const getWindowStateFilePath = () => {
+    try {
+        const userDataPath = app.getPath('userData');
+        return path.join(userDataPath, 'window-state.json');
+    } catch (e) {
+        // Fallback to current directory if userData not available
+        return path.join(__dirname, 'window-state.json');
+    }
+};
 
 // Get saved window bounds from JSON file
 const getSavedWindowBounds = () => {
     try {
+        const WINDOW_STATE_FILE = getWindowStateFilePath();
         if (fs.existsSync(WINDOW_STATE_FILE)) {
             const data = fs.readFileSync(WINDOW_STATE_FILE, 'utf8');
             return JSON.parse(data);
@@ -33,10 +91,18 @@ const getSavedWindowBounds = () => {
 // Save window bounds to JSON file
 const saveWindowBounds = (bounds) => {
     try {
+        const WINDOW_STATE_FILE = getWindowStateFilePath();
         const stateData = {
             ...bounds,
             lastSaved: new Date().toISOString()
         };
+        
+        // Ensure the directory exists
+        const dir = path.dirname(WINDOW_STATE_FILE);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        
         fs.writeFileSync(WINDOW_STATE_FILE, JSON.stringify(stateData, null, 2));
         console.log('Window state saved:', bounds);
     } catch (error) {
@@ -73,6 +139,8 @@ const validateBounds = (bounds) => {
 };
 
 const createWindow = () => {
+    logToFile('Creating main window');
+    
     // Load saved window bounds or use defaults
     const savedBounds = getSavedWindowBounds();
     let windowOptions = {
@@ -83,10 +151,10 @@ const createWindow = () => {
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
-            enableRemoteModule: true
+            sandbox: false
         },
-        icon: path.join(__dirname, 'assets', 'icon.ico'),
-        show: false,
+        icon: path.join(__dirname, 'icons', 'icon.ico'),
+        show: true,
         title: 'Jamber3 - Automated Guitar Song Library'
     };
     
@@ -100,24 +168,56 @@ const createWindow = () => {
         
         // Restore maximized state
         if (savedBounds.isMaximized) {
-            windowOptions.show = false; // We'll maximize after show
+            windowOptions.show = true; // Show immediately, we'll maximize after
         }
         
         console.log('Restored window bounds:', validatedBounds);
     }
     
-    mainWindow = new BrowserWindow(windowOptions);
+    logToFile('Window options configured', windowOptions);
+    
+    try {
+        mainWindow = new BrowserWindow(windowOptions);
+        logToFile('BrowserWindow created successfully');
+        
+        // Add crash detection
+        mainWindow.webContents.on('crashed', () => {
+            logToFile('Renderer process crashed');
+        });
+        
+        mainWindow.webContents.on('unresponsive', () => {
+            logToFile('Renderer process became unresponsive');
+        });
+        
+        mainWindow.webContents.on('responsive', () => {
+            logToFile('Renderer process became responsive again');
+        });
+        
+        mainWindow.on('closed', () => {
+            logToFile('Main window closed');
+        });
 
-    // Start the Express server
-    startServer();
+        // Start the server or load file
+        startServer();
+        
+        // Load the URL immediately after server starts
+        setTimeout(() => {
+            logToFile('Loading localhost:8081 directly');
+            mainWindow.loadURL('http://localhost:8081');
+        }, 3000);
 
-    // Wait a moment for server to start, then load the page
-    setTimeout(() => {
-        mainWindow.loadURL('http://localhost:8081');
-    }, 2000);
+    } catch (error) {
+        logToFile('Error creating BrowserWindow', {
+            error: error.message,
+            stack: error.stack
+        });
+        throw error;
+    }
 
     mainWindow.once('ready-to-show', () => {
+        logToFile('Window ready-to-show event fired');
         mainWindow.show();
+        mainWindow.focus();
         
         // Restore maximized state if it was saved
         const savedBounds = getSavedWindowBounds();
@@ -267,6 +367,8 @@ const createWindow = () => {
         isSaving = false;
         
         mainWindow = null;
+        
+        // Handle server shutdown for both modes
         if (serverProcess) {
             console.log('Terminating server process...');
             serverProcess.kill('SIGTERM');
@@ -278,6 +380,13 @@ const createWindow = () => {
                     serverProcess.kill('SIGKILL');
                 }
             }, 5000);
+        } else if (serverModule && serverModule.server) {
+            console.log('Shutting down embedded server...');
+            try {
+                serverModule.gracefulShutdown('APP_CLOSE');
+            } catch (error) {
+                console.error('Error shutting down embedded server:', error);
+            }
         }
     });
 };
@@ -285,6 +394,161 @@ const createWindow = () => {
 const startServer = (callback) => {
     const isDebug = process.env.NODE_ENV === 'development' || process.argv.includes('--debug');
     
+    // In packaged app, we need to use a different approach
+    // Check if we're in a packaged app
+    const isPackaged = app.isPackaged;
+    
+    logToFile('Starting server', { isPackaged, isDebug });
+    
+    // Force development mode for now - spawn separate server process
+    if (false && isPackaged) {
+        // In packaged app, run the server in the same process
+        logToFile('Running in packaged mode - starting embedded server');
+        
+        try {
+            // Require the server directly instead of spawning a process
+            serverModule = require('./server.js');
+            
+            // Give the server a moment to start, then load the UI
+            setTimeout(() => {
+                logToFile('Loading application UI after server startup');
+                mainWindow.loadURL('http://localhost:8081').then(() => {
+                    logToFile('Application UI loaded successfully');
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.show();
+                        mainWindow.focus();
+                    }
+                }).catch((error) => {
+                    logToFile('Error loading application UI', {
+                        error: error.message,
+                        stack: error.stack
+                    });
+                    // If loading fails, still show the window with fallback content
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        const fallbackHtml = `
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <title>Jamber3 - Connection Error</title>
+                                <style>
+                                    body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #1a1a1a; color: #fff; }
+                                    h1 { color: #ff6b6b; }
+                                    .error-box { background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                                    .error-details { background: #333; padding: 10px; border-radius: 4px; font-family: monospace; text-align: left; }
+                                    .retry-btn { background: #007acc; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; }
+                                </style>
+                            </head>
+                            <body>
+                                <h1>Connection Error</h1>
+                                <div class="error-box">
+                                    <p>Could not connect to the Jamber3 server:</p>
+                                    <div class="error-details">${error.message}</div>
+                                </div>
+                                <button class="retry-btn" onclick="location.reload()">Retry Connection</button>
+                            </body>
+                            </html>
+                        `;
+                        mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fallbackHtml)}`);
+                        mainWindow.show();
+                    }
+                });
+            }, 2000); // Give server 2 seconds to start
+        } catch (error) {
+            logToFile('Failed to start embedded server', {
+                error: error.message,
+                stack: error.stack
+            });
+            
+            // If server fails due to missing dependencies, try to load the app without server
+            if (error.message.includes('Cannot find module') || error.message.includes('express')) {
+                logToFile('Attempting to load application in standalone mode without server');
+                
+                // Load the main HTML file directly without server
+                setTimeout(() => {
+                    const htmlPath = path.join(__dirname, 'index.html');
+                    mainWindow.loadFile(htmlPath).then(() => {
+                        logToFile('Standalone application loaded successfully');
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.show();
+                        }
+                    }).catch((loadError) => {
+                        logToFile('Failed to load standalone application', {
+                            error: loadError.message,
+                            stack: loadError.stack
+                        });
+                        
+                        // Show error UI as last resort
+                        const errorHtml = `
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <title>Jamber3 - Startup Error</title>
+                                <style>
+                                    body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #1a1a1a; color: #fff; }
+                                    h1 { color: #ff6b6b; }
+                                    .error-box { background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                                    .error-details { background: #333; padding: 10px; border-radius: 4px; font-family: monospace; text-align: left; }
+                                    .info-box { background: #2a4a2a; padding: 15px; border-radius: 4px; margin: 15px 0; }
+                                </style>
+                            </head>
+                            <body>
+                                <h1>Application Startup Issue</h1>
+                                <div class="error-box">
+                                    <p>Unable to start server or load application files:</p>
+                                    <div class="error-details">Server: ${error.message}<br/>Load: ${loadError.message}</div>
+                                </div>
+                                <div class="info-box">
+                                    <p><strong>Note:</strong> This appears to be a dependency packaging issue.</p>
+                                    <p>The application may need to be rebuilt with proper dependency inclusion.</p>
+                                </div>
+                                <p>Logs available at: ${app.getPath('userData')}\\main-logs\\</p>
+                            </body>
+                            </html>
+                        `;
+                        mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`);
+                        mainWindow.show();
+                    });
+                }, 1000);
+            } else {
+                // Show error UI for other types of errors
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    const errorHtml = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>Jamber3 - Server Error</title>
+                            <style>
+                                body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #1a1a1a; color: #fff; }
+                                h1 { color: #ff6b6b; }
+                                .error-box { background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                                .error-details { background: #333; padding: 10px; border-radius: 4px; font-family: monospace; text-align: left; }
+                                .log-path { background: #333; padding: 10px; border-radius: 4px; font-family: monospace; margin-top: 10px; }
+                            </style>
+                        </head>
+                        <body>
+                            <h1>Server Initialization Error</h1>
+                            <div class="error-box">
+                                <p>Failed to start the Jamber3 server:</p>
+                                <div class="error-details">${error.message}</div>
+                            </div>
+                            <p>Check the log files for more details:</p>
+                            <div class="log-path">${app.getPath('userData')}\\main-logs\\</div>
+                        </body>
+                        </html>
+                    `;
+                    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`);
+                    mainWindow.show();
+                }
+            }
+        }
+        
+        if (callback) {
+            callback();
+        }
+        return;
+    }
+    
+    // Development mode - spawn separate process
     serverProcess = spawn('node', ['server.js'], {
         cwd: __dirname,
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'], // Use pipe to capture output
@@ -297,6 +561,14 @@ const startServer = (callback) => {
         const output = data.toString();
         console.log(`[Server]: ${output}`);
         if (output.includes('SERVER_READY')) {
+            logToFile('Server ready, loading UI');
+            setTimeout(() => {
+                mainWindow.loadURL('http://localhost:8081').then(() => {
+                    logToFile('UI loaded from server ready callback');
+                }).catch(err => {
+                    logToFile('Error loading UI from server ready', { error: err.message });
+                });
+            }, 1000);
             if (callback) {
                 callback();
             }
@@ -333,6 +605,45 @@ ipcMain.handle('open-file', async (event, filePath) => {
     }
 });
 
+// Handle error logging from renderer process
+ipcMain.handle('log-error', async (event, logEntry) => {
+    try {
+        const fs = require('fs').promises;
+        const path = require('path');
+        
+        const logDir = path.join(app.getPath('userData'), 'logs');
+        const logFile = path.join(logDir, `error-${new Date().toISOString().split('T')[0]}.log`);
+        
+        // Ensure log directory exists
+        try {
+            await fs.mkdir(logDir, { recursive: true });
+        } catch (err) {
+            // Directory might already exist
+        }
+
+        // Format log entry with additional system info
+        const enhancedLogEntry = {
+            ...logEntry,
+            electronVersion: process.versions.electron,
+            nodeVersion: process.versions.node,
+            platform: process.platform,
+            arch: process.arch,
+            isPackaged: app.isPackaged
+        };
+
+        const logLine = JSON.stringify(enhancedLogEntry) + '\n';
+        
+        // Append to log file
+        await fs.appendFile(logFile, logLine);
+        
+        console.log(`Error logged to: ${logFile}`);
+        return { success: true, logFile: logFile };
+    } catch (error) {
+        console.error('Failed to write error log:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 
 // Handle app events
 app.whenReady().then(() => {
@@ -346,9 +657,17 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+    // Handle server shutdown for both modes
     if (serverProcess && !serverProcess.killed) {
         console.log('Terminating server process on window close...');
         serverProcess.kill('SIGTERM');
+    } else if (serverModule && serverModule.server) {
+        console.log('Shutting down embedded server on window close...');
+        try {
+            serverModule.gracefulShutdown('WINDOW_CLOSE');
+        } catch (error) {
+            console.error('Error shutting down embedded server:', error);
+        }
     }
     if (process.platform !== 'darwin') {
         app.quit();
@@ -358,20 +677,38 @@ app.on('window-all-closed', () => {
 let isQuitting = false;
 
 app.on('before-quit', (event) => {
-    if (serverProcess && !serverProcess.killed && !isQuitting) {
-        console.log('Terminating server process before quit...');
-        isQuitting = true;
-        event.preventDefault();
-        
-        serverProcess.kill('SIGTERM');
-        
-        // Give server 3 seconds to shut down gracefully
-        setTimeout(() => {
-            if (serverProcess && !serverProcess.killed) {
-                console.log('Force killing server process...');
-                serverProcess.kill('SIGKILL');
+    if (!isQuitting) {
+        // Handle server shutdown for both modes
+        if (serverProcess && !serverProcess.killed) {
+            console.log('Terminating server process before quit...');
+            isQuitting = true;
+            event.preventDefault();
+            
+            serverProcess.kill('SIGTERM');
+            
+            // Give server 3 seconds to shut down gracefully
+            setTimeout(() => {
+                if (serverProcess && !serverProcess.killed) {
+                    console.log('Force killing server process...');
+                    serverProcess.kill('SIGKILL');
+                }
+                app.quit();
+            }, 3000);
+        } else if (serverModule && serverModule.server) {
+            console.log('Shutting down embedded server before quit...');
+            isQuitting = true;
+            event.preventDefault();
+            
+            try {
+                serverModule.gracefulShutdown('APP_QUIT');
+                // Give embedded server time to shut down
+                setTimeout(() => {
+                    app.quit();
+                }, 1000);
+            } catch (error) {
+                console.error('Error shutting down embedded server:', error);
+                app.quit();
             }
-            app.quit();
-        }, 3000);
+        }
     }
 });
