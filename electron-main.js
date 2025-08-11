@@ -400,8 +400,7 @@ const startServer = (callback) => {
     
     logToFile('Starting server', { isPackaged, isDebug });
     
-    // Force development mode for now - spawn separate server process
-    if (false && isPackaged) {
+    if (isPackaged) {
         // In packaged app, run the server in the same process
         logToFile('Running in packaged mode - starting embedded server');
         
@@ -417,6 +416,7 @@ const startServer = (callback) => {
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.show();
                         mainWindow.focus();
+                        logToFile('Window shown and focused after UI load');
                     }
                 }).catch((error) => {
                     logToFile('Error loading application UI', {
