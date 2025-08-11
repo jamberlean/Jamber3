@@ -120,5 +120,8 @@ temp/
 # Electron build output
 dist/
 
+# Configuration files (user-specific)
+jamber3-config.json
+
 # Planning documents
 OnlineMusicPlan.md
