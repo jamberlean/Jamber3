@@ -124,4 +124,19 @@ dist/
 jamber3-config.json
 
 # Planning documents
-OnlineMusicPlan.mdbuild-output/
+OnlineMusicPlan.md
+Jamber3-Marketing-Plan.md
+
+# Build output (except installer exe for GitHub downloads)
+build-output/*
+!build-output/*.exe
+
+# Website folder
+website/
+
+# User-specific files
+window-state.json
+.claude/
+
+# Error logs (specific)
+errors.log

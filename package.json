@@ -1,6 +1,6 @@
 {
   "name": "jamber3",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automated guitar song library with tablature discovery",
   "main": "electron-main.js",
   "scripts": {
@@ -28,7 +28,8 @@
     "buffer-crc32": "^1.0.0",
     "electron": "^28.0.0",
     "electron-builder": "^26.0.12",
-    "png-to-ico": "^2.1.8"
+    "png-to-ico": "^2.1.8",
+    "rcedit": "^4.0.1"
   },
   "keywords": [
     "guitar",
@@ -48,7 +49,10 @@
     "asar": false,
     "files": [
       "index.html",
+      "help.html",
       "styles.css",
+      "help-styles.css",
+      "window-state.json",
       "electron-main.js",
       "server.js",
       "libs/**/*",
@@ -83,8 +87,8 @@
     ],
     "extraResources": [
       {
-        "from": "assets",
-        "to": "assets",
+        "from": "icons",
+        "to": "icons",
         "filter": [
           "**/*"
         ]

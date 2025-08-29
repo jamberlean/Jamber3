@@ -56,7 +56,13 @@
       "Bash(tasklist)",
       "Bash(npm run dev:*)",
       "Bash(git rm:*)",
-      "Bash(git stash push:*)"
+      "Bash(git stash push:*)",
+      "Bash(git reset:*)",
+      "Bash(python:*)",
+      "Bash(py:*)",
+      "Bash(copy:*)",
+      "Bash(pip install:*)",
+      "Bash(git pull:*)"
     ],
     "deny": []
   }
